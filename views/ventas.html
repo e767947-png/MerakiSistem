@@ -224,7 +224,9 @@
         });
     };
 
+    // Función ELIMINAR VENTA (asegúrate de que esté definida como global)
     window.eliminarVenta = function(id) {
+      console.log('🗑️ Eliminar venta ID:', id);
       if (!confirm('¿Estás seguro de eliminar esta venta? Se revertirá el inventario.')) return;
       fetch(`/api/ventas/${id}`, { method: 'DELETE' })
         .then(res => res.json())

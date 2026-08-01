@@ -2,6 +2,7 @@ const express = require("express");
 const path = require("path");
 const Database = require("better-sqlite3");
 const session = require("express-session");
+const fs = require("fs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -29,8 +30,6 @@ function isAuthenticated(req, res, next) {
 
 // ---------- BASE DE DATOS ----------
 const dbPath = process.env.DB_PATH || "./database/meraki.db";
-// Crear la carpeta si no existe
-const fs = require("fs");
 const dbDir = path.dirname(dbPath);
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
@@ -99,7 +98,7 @@ db.exec(`
   );
 `);
 
-// ---------- INSERTAR PRODUCTOS DE VENTA ----------
+// Productos de venta
 db.exec(`
   INSERT OR IGNORE INTO productos (codigo, nombre, categoria, precio, existencia, estado, unidad)
   VALUES
@@ -126,7 +125,7 @@ db.exec(`
     ('21','Papas Meraki','Panes/Salados',35,0,'Activo','unidad')
 `);
 
-// ---------- INSERTAR INSUMOS ----------
+// Insumos
 db.exec(`
   INSERT OR IGNORE INTO productos (codigo, nombre, categoria, precio, existencia, estado, unidad)
   VALUES
@@ -172,7 +171,7 @@ db.exec(`
     ('61','Mayonesa','Insumos',0,0,'Activo','unidad')
 `);
 
-// ---------- RECETAS ----------
+// Recetas
 db.exec(`DELETE FROM recetas`);
 db.exec(`
   INSERT INTO recetas (producto_id, ingrediente_id, cantidad)
@@ -245,42 +244,49 @@ db.exec(`
   SELECT (SELECT id FROM productos WHERE codigo = '7'), (SELECT id FROM productos WHERE nombre = 'Hielo'), 8
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '7'), (SELECT id FROM productos WHERE nombre = 'Crema Batida'), 2
+  -- Café Americano Pequeño (10)
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '10'), (SELECT id FROM productos WHERE nombre = 'Café en Grano'), 1
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '10'), (SELECT id FROM productos WHERE nombre = 'Vasos Café Pequeño'), 1
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '10'), (SELECT id FROM productos WHERE nombre = 'Hielo'), 2
+  -- Café Americano Grande (11)
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '11'), (SELECT id FROM productos WHERE nombre = 'Café en Grano'), 2
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '11'), (SELECT id FROM productos WHERE nombre = 'Vasos Café Grande'), 1
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '11'), (SELECT id FROM productos WHERE nombre = 'Hielo'), 4
+  -- Capuchino Pequeño (12)
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '12'), (SELECT id FROM productos WHERE nombre = 'Café en Grano'), 1
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '12'), (SELECT id FROM productos WHERE nombre = 'Leche Verde'), 5
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '12'), (SELECT id FROM productos WHERE nombre = 'Vasos Café Pequeño'), 1
+  -- Capuchino Grande (13)
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '13'), (SELECT id FROM productos WHERE nombre = 'Café en Grano'), 2
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '13'), (SELECT id FROM productos WHERE nombre = 'Leche Verde'), 8
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '13'), (SELECT id FROM productos WHERE nombre = 'Vasos Café Grande'), 1
+  -- Cocoa Pequeño (14)
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '14'), (SELECT id FROM productos WHERE nombre = 'Leche Verde'), 4
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '14'), (SELECT id FROM productos WHERE nombre = 'Salsa Dulce'), 2
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '14'), (SELECT id FROM productos WHERE nombre = 'Vasos Café Pequeño'), 1
+  -- Cocoa Grande (15)
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '15'), (SELECT id FROM productos WHERE nombre = 'Leche Verde'), 6
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '15'), (SELECT id FROM productos WHERE nombre = 'Salsa Dulce'), 3
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '15'), (SELECT id FROM productos WHERE nombre = 'Vasos Café Grande'), 1
+  -- Combo Postre+Café (20)
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '20'), (SELECT id FROM productos WHERE nombre = 'Café en Grano'), 1
   UNION ALL
@@ -289,6 +295,7 @@ db.exec(`
   SELECT (SELECT id FROM productos WHERE codigo = '20'), (SELECT id FROM productos WHERE nombre = 'Hielo'), 2
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '20'), (SELECT id FROM productos WHERE nombre = 'Postre del día'), 1
+  -- Papas Meraki (21)
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '21'), (SELECT id FROM productos WHERE nombre = 'Papas'), 8
   UNION ALL
@@ -419,9 +426,11 @@ app.put("/api/productos/:id/existencia", isAuthenticated, (req, res) => {
   }
 });
 
-// Registrar venta
+// Registrar venta (con logs de depuración)
 app.post("/api/ventas", isAuthenticated, (req, res) => {
   const venta = req.body;
+  console.log("📝 Venta recibida:", JSON.stringify(venta, null, 2));
+
   const subtotal = venta.productos.reduce((sum, p) => sum + p.cantidad * p.precio, 0);
   const total = subtotal - (venta.descuento || 0);
   const fecha = venta.fecha || new Date().toISOString();
@@ -433,6 +442,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
     );
     const result = insertVenta.run(fecha, venta.metodo_pago, venta.descuento || 0, subtotal, total);
     const ventaId = result.lastInsertRowid;
+    console.log(`✅ Venta #${ventaId} insertada`);
 
     const insertDetalle = db.prepare(
       `INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio, subtotal)
@@ -442,7 +452,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
       `UPDATE productos SET existencia = existencia - ? WHERE id = ?`
     );
 
-    // Obtener recetas para los productos vendidos
+    // Obtener recetas
     const productoIds = venta.productos.map(p => p.producto_id);
     const placeholders = productoIds.map(() => '?').join(',');
     const recetasStmt = db.prepare(
@@ -451,6 +461,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
        WHERE r.producto_id IN (${placeholders})`
     );
     const recetasRows = recetasStmt.all(...productoIds);
+    console.log("📋 Recetas encontradas:", recetasRows);
 
     const productosConRecetas = new Set(recetasRows.map(r => r.producto_id));
     const cantidadesPorProducto = {};
@@ -467,7 +478,6 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
       ingredientes[row.ingrediente_id] = (ingredientes[row.ingrediente_id] || 0) + totalIngrediente;
     });
 
-    // 1. Descontar ingredientes
     for (const [ingredienteId, cantidad] of Object.entries(ingredientes)) {
       const row = db.prepare("SELECT existencia FROM productos WHERE id = ?").get(ingredienteId);
       if (!row) throw new Error(`Ingrediente ${ingredienteId} no encontrado`);
@@ -478,10 +488,9 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
       console.log(`✅ Descontado ${cantidad} del ingrediente ID ${ingredienteId}`);
     }
 
-    // 2. Descontar productos simples (sin recetas y que NO son insumos)
+    // Descontar productos simples (sin recetas y que NO son insumos)
     const productosSimples = venta.productos.filter(p => {
       const tieneReceta = productosConRecetas.has(p.producto_id);
-      // Verificar si es insumo consultando la categoría
       const productoInfo = db.prepare("SELECT categoria FROM productos WHERE id = ?").get(p.producto_id);
       const esInsumo = productoInfo && productoInfo.categoria === 'Insumos';
       return !tieneReceta && !esInsumo;
@@ -567,8 +576,8 @@ app.get("/api/ventas/:id/detalle", isAuthenticated, (req, res) => {
 // Eliminar venta (con reversión de inventario)
 app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
   const ventaId = req.params.id;
+  console.log(`🗑️ Eliminando venta #${ventaId}`);
   try {
-    // Obtener detalles de la venta
     const detalles = db.prepare(
       `SELECT d.producto_id, d.cantidad, p.categoria
        FROM detalle_ventas d
@@ -579,10 +588,8 @@ app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
     if (detalles.length === 0) {
       return res.status(404).json({ error: "Venta no encontrada o sin detalles" });
     }
+    console.log("📋 Detalles de la venta:", detalles);
 
-    console.log(`🔄 Reviertiendo venta ID ${ventaId}, detalles:`, detalles);
-
-    // Revertir inventario
     const updateExistencia = db.prepare("UPDATE productos SET existencia = existencia + ? WHERE id = ?");
     const recetasStmt = db.prepare("SELECT producto_id, ingrediente_id, cantidad FROM recetas WHERE producto_id = ?");
 
@@ -592,20 +599,17 @@ app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
 
       const recetas = recetasStmt.all(det.producto_id);
       if (recetas.length > 0) {
-        // Producto compuesto: revertir ingredientes
         for (const rec of recetas) {
           const cantidad = rec.cantidad * det.cantidad;
           updateExistencia.run(cantidad, rec.ingrediente_id);
           console.log(`↩️ Revertido ${cantidad} del ingrediente ID ${rec.ingrediente_id}`);
         }
       } else {
-        // Producto simple: revertir su propia existencia
         updateExistencia.run(det.cantidad, det.producto_id);
         console.log(`↩️ Revertido ${det.cantidad} del producto simple ID ${det.producto_id}`);
       }
     }
 
-    // Eliminar detalles y la venta
     db.prepare("DELETE FROM detalle_ventas WHERE venta_id = ?").run(ventaId);
     const result = db.prepare("DELETE FROM ventas WHERE id = ?").run(ventaId);
 
@@ -613,7 +617,6 @@ app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
       return res.status(404).json({ error: "Venta no encontrada" });
     }
 
-    // Revertir impacto en caja (si era efectivo y la caja aún está abierta)
     const venta = db.prepare("SELECT metodo_pago, total, fecha FROM ventas WHERE id = ?").get(ventaId);
     if (venta && venta.metodo_pago === 'Efectivo') {
       const cajaRow = db.prepare(
@@ -631,7 +634,7 @@ app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
   }
 });
 
-// Dashboard
+// Dashboard (resumido por brevedad)
 app.get("/api/dashboard", isAuthenticated, (req, res) => {
   const hoy = new Date().toISOString().slice(0, 10);
   try {
@@ -678,7 +681,7 @@ app.get("/api/dashboard", isAuthenticated, (req, res) => {
   }
 });
 
-// Gastos
+// Gastos (resumido)
 app.get("/api/gastos", isAuthenticated, (req, res) => {
   const { fecha_inicio, fecha_fin, categoria } = req.query;
   let sql = "SELECT * FROM gastos WHERE 1=1";
@@ -726,7 +729,7 @@ app.post("/api/gastos", isAuthenticated, (req, res) => {
   }
 });
 
-// Caja - Resumen
+// Caja (resumido)
 app.get("/api/caja/resumen", isAuthenticated, (req, res) => {
   const { fecha } = req.query;
   const hoy = fecha || new Date().toISOString().slice(0, 10);
@@ -784,7 +787,6 @@ app.get("/api/caja/resumen", isAuthenticated, (req, res) => {
   }
 });
 
-// Abrir caja
 app.post("/api/caja/apertura", isAuthenticated, (req, res) => {
   const { monto_apertura } = req.body;
   const fecha = new Date().toISOString();
@@ -806,7 +808,6 @@ app.post("/api/caja/apertura", isAuthenticated, (req, res) => {
   }
 });
 
-// Cerrar caja
 app.post("/api/caja/cierre", isAuthenticated, (req, res) => {
   const { detalle_efectivo } = req.body;
   const fecha = new Date().toISOString();
@@ -836,7 +837,6 @@ app.post("/api/caja/cierre", isAuthenticated, (req, res) => {
   }
 });
 
-// Reporte de ganancias
 app.get("/api/reportes/ganancias", isAuthenticated, (req, res) => {
   const { inicio, fin } = req.query;
   let sql = "SELECT date(fecha) as dia, SUM(total) as total_dia FROM ventas";
