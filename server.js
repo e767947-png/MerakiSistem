@@ -458,7 +458,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
       cantidadesPorProducto[p.producto_id] = p.cantidad;
     });
 
-    // Descontar ingredientes
+    // Descontar ingredientes (productos con recetas)
     const ingredientes = {};
     recetasRows.forEach(row => {
       const cantidadVendida = cantidadesPorProducto[row.producto_id] || 0;
@@ -467,6 +467,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
       ingredientes[row.ingrediente_id] = (ingredientes[row.ingrediente_id] || 0) + totalIngrediente;
     });
 
+    // 1. Descontar ingredientes
     for (const [ingredienteId, cantidad] of Object.entries(ingredientes)) {
       const row = db.prepare("SELECT existencia FROM productos WHERE id = ?").get(ingredienteId);
       if (!row) throw new Error(`Ingrediente ${ingredienteId} no encontrado`);
@@ -474,14 +475,19 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
         throw new Error(`Stock insuficiente para ingrediente ID ${ingredienteId}. Disponible: ${row.existencia}, necesario: ${cantidad}`);
       }
       updateExistencia.run(cantidad, ingredienteId);
+      console.log(`✅ Descontado ${cantidad} del ingrediente ID ${ingredienteId}`);
     }
 
-    // Descontar productos simples
+    // 2. Descontar productos simples (sin recetas y que NO son insumos)
     const productosSimples = venta.productos.filter(p => {
       const tieneReceta = productosConRecetas.has(p.producto_id);
-      const esInsumo = db.prepare("SELECT categoria FROM productos WHERE id = ?").get(p.producto_id)?.categoria === 'Insumos';
+      // Verificar si es insumo consultando la categoría
+      const productoInfo = db.prepare("SELECT categoria FROM productos WHERE id = ?").get(p.producto_id);
+      const esInsumo = productoInfo && productoInfo.categoria === 'Insumos';
       return !tieneReceta && !esInsumo;
     });
+
+    console.log(`📦 Productos simples a descontar: ${productosSimples.map(p => p.producto_id).join(', ')}`);
 
     for (const p of productosSimples) {
       const row = db.prepare("SELECT existencia FROM productos WHERE id = ?").get(p.producto_id);
@@ -490,6 +496,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
         throw new Error(`Stock insuficiente para producto ID ${p.producto_id}. Disponible: ${row.existencia}, necesario: ${p.cantidad}`);
       }
       updateExistencia.run(p.cantidad, p.producto_id);
+      console.log(`✅ Descontado ${p.cantidad} del producto simple ID ${p.producto_id}`);
     }
 
     // Insertar detalle de ventas
@@ -510,7 +517,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
 
     res.json({ mensaje: "Venta guardada correctamente", id: ventaId });
   } catch (err) {
-    console.error(err);
+    console.error('❌ Error en venta:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -561,6 +568,7 @@ app.get("/api/ventas/:id/detalle", isAuthenticated, (req, res) => {
 app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
   const ventaId = req.params.id;
   try {
+    // Obtener detalles de la venta
     const detalles = db.prepare(
       `SELECT d.producto_id, d.cantidad, p.categoria
        FROM detalle_ventas d
@@ -572,6 +580,9 @@ app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
       return res.status(404).json({ error: "Venta no encontrada o sin detalles" });
     }
 
+    console.log(`🔄 Reviertiendo venta ID ${ventaId}, detalles:`, detalles);
+
+    // Revertir inventario
     const updateExistencia = db.prepare("UPDATE productos SET existencia = existencia + ? WHERE id = ?");
     const recetasStmt = db.prepare("SELECT producto_id, ingrediente_id, cantidad FROM recetas WHERE producto_id = ?");
 
@@ -581,15 +592,20 @@ app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
 
       const recetas = recetasStmt.all(det.producto_id);
       if (recetas.length > 0) {
+        // Producto compuesto: revertir ingredientes
         for (const rec of recetas) {
           const cantidad = rec.cantidad * det.cantidad;
           updateExistencia.run(cantidad, rec.ingrediente_id);
+          console.log(`↩️ Revertido ${cantidad} del ingrediente ID ${rec.ingrediente_id}`);
         }
       } else {
+        // Producto simple: revertir su propia existencia
         updateExistencia.run(det.cantidad, det.producto_id);
+        console.log(`↩️ Revertido ${det.cantidad} del producto simple ID ${det.producto_id}`);
       }
     }
 
+    // Eliminar detalles y la venta
     db.prepare("DELETE FROM detalle_ventas WHERE venta_id = ?").run(ventaId);
     const result = db.prepare("DELETE FROM ventas WHERE id = ?").run(ventaId);
 
@@ -597,6 +613,7 @@ app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
       return res.status(404).json({ error: "Venta no encontrada" });
     }
 
+    // Revertir impacto en caja (si era efectivo y la caja aún está abierta)
     const venta = db.prepare("SELECT metodo_pago, total, fecha FROM ventas WHERE id = ?").get(ventaId);
     if (venta && venta.metodo_pago === 'Efectivo') {
       const cajaRow = db.prepare(
@@ -609,7 +626,7 @@ app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
 
     res.json({ mensaje: "Venta eliminada correctamente" });
   } catch (err) {
-    console.error(err);
+    console.error('❌ Error al eliminar venta:', err);
     res.status(500).json({ error: err.message });
   }
 });
