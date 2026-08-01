@@ -224,7 +224,7 @@
         });
     };
 
-    // Función ELIMINAR VENTA (asegúrate de que esté definida como global)
+    // ✅ FUNCIÓN ELIMINAR VENTA (definida globalmente)
     window.eliminarVenta = function(id) {
       console.log('🗑️ Eliminar venta ID:', id);
       if (!confirm('¿Estás seguro de eliminar esta venta? Se revertirá el inventario.')) return;
@@ -235,7 +235,10 @@
           cargarHistorial();
           cargarProductos();
         })
-        .catch(err => alert('Error: ' + err.message));
+        .catch(err => {
+          console.error('❌ Error al eliminar:', err);
+          alert('Error: ' + err.message);
+        });
     };
 
     cargarProductos();
