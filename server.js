@@ -428,14 +428,20 @@ app.put("/api/productos/:id/existencia", isAuthenticated, (req, res) => {
 
 // Registrar venta (con logs de depuración)
 app.post("/api/ventas", isAuthenticated, (req, res) => {
-  const venta = req.body;
-  console.log("📝 Venta recibida:", JSON.stringify(venta, null, 2));
-
-  const subtotal = venta.productos.reduce((sum, p) => sum + p.cantidad * p.precio, 0);
-  const total = subtotal - (venta.descuento || 0);
-  const fecha = venta.fecha || new Date().toISOString();
-
   try {
+    const venta = req.body;
+    console.log("📝 Venta recibida:", JSON.stringify(venta, null, 2));
+
+    // Validar que existan productos
+    if (!venta.productos || venta.productos.length === 0) {
+      return res.status(400).json({ error: "La venta debe tener al menos un producto" });
+    }
+
+    const subtotal = venta.productos.reduce((sum, p) => sum + p.cantidad * p.precio, 0);
+    const total = subtotal - (venta.descuento || 0);
+    const fecha = venta.fecha || new Date().toISOString();
+
+    // Insertar venta
     const insertVenta = db.prepare(
       `INSERT INTO ventas (fecha, metodo_pago, descuento, subtotal, total)
        VALUES (?, ?, ?, ?, ?)`
@@ -444,6 +450,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
     const ventaId = result.lastInsertRowid;
     console.log(`✅ Venta #${ventaId} insertada`);
 
+    // Insertar detalle y descontar inventario
     const insertDetalle = db.prepare(
       `INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio, subtotal)
        VALUES (?, ?, ?, ?, ?)`
@@ -452,7 +459,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
       `UPDATE productos SET existencia = existencia - ? WHERE id = ?`
     );
 
-    // Obtener recetas
+    // Obtener recetas para los productos vendidos
     const productoIds = venta.productos.map(p => p.producto_id);
     const placeholders = productoIds.map(() => '?').join(',');
     const recetasStmt = db.prepare(
@@ -469,7 +476,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
       cantidadesPorProducto[p.producto_id] = p.cantidad;
     });
 
-    // Descontar ingredientes (productos con recetas)
+    // 1. Descontar ingredientes (productos con recetas)
     const ingredientes = {};
     recetasRows.forEach(row => {
       const cantidadVendida = cantidadesPorProducto[row.producto_id] || 0;
@@ -480,7 +487,9 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
 
     for (const [ingredienteId, cantidad] of Object.entries(ingredientes)) {
       const row = db.prepare("SELECT existencia FROM productos WHERE id = ?").get(ingredienteId);
-      if (!row) throw new Error(`Ingrediente ${ingredienteId} no encontrado`);
+      if (!row) {
+        throw new Error(`Ingrediente con ID ${ingredienteId} no encontrado`);
+      }
       if (row.existencia < cantidad) {
         throw new Error(`Stock insuficiente para ingrediente ID ${ingredienteId}. Disponible: ${row.existencia}, necesario: ${cantidad}`);
       }
@@ -488,7 +497,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
       console.log(`✅ Descontado ${cantidad} del ingrediente ID ${ingredienteId}`);
     }
 
-    // Descontar productos simples (sin recetas y que NO son insumos)
+    // 2. Descontar productos simples (sin recetas y que NO son insumos)
     const productosSimples = venta.productos.filter(p => {
       const tieneReceta = productosConRecetas.has(p.producto_id);
       const productoInfo = db.prepare("SELECT categoria FROM productos WHERE id = ?").get(p.producto_id);
@@ -500,7 +509,9 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
 
     for (const p of productosSimples) {
       const row = db.prepare("SELECT existencia FROM productos WHERE id = ?").get(p.producto_id);
-      if (!row) throw new Error(`Producto ${p.producto_id} no encontrado`);
+      if (!row) {
+        throw new Error(`Producto con ID ${p.producto_id} no encontrado`);
+      }
       if (row.existencia < p.cantidad) {
         throw new Error(`Stock insuficiente para producto ID ${p.producto_id}. Disponible: ${row.existencia}, necesario: ${p.cantidad}`);
       }
@@ -578,6 +589,7 @@ app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
   const ventaId = req.params.id;
   console.log(`🗑️ Eliminando venta #${ventaId}`);
   try {
+    // Obtener detalles de la venta
     const detalles = db.prepare(
       `SELECT d.producto_id, d.cantidad, p.categoria
        FROM detalle_ventas d
@@ -610,6 +622,7 @@ app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
       }
     }
 
+    // Eliminar detalles y la venta
     db.prepare("DELETE FROM detalle_ventas WHERE venta_id = ?").run(ventaId);
     const result = db.prepare("DELETE FROM ventas WHERE id = ?").run(ventaId);
 
@@ -617,6 +630,7 @@ app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
       return res.status(404).json({ error: "Venta no encontrada" });
     }
 
+    // Revertir impacto en caja (si era efectivo y la caja aún está abierta)
     const venta = db.prepare("SELECT metodo_pago, total, fecha FROM ventas WHERE id = ?").get(ventaId);
     if (venta && venta.metodo_pago === 'Efectivo') {
       const cajaRow = db.prepare(
