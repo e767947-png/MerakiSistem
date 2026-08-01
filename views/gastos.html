@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gastos - Meraki SISTEM</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+  <button class="menu-toggle" id="menuToggle">☰</button>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="logo">☕ Meraki SISTEM</div>
+    <nav>
+      <a href="/">📊 Dashboard</a>
+      <a href="/ventas">🛒 Ventas</a>
+      <a href="/inventario">📦 Inventario</a>
+      <a href="/caja">💰 Caja</a>
+      <a href="/gastos" class="active">💸 Gastos</a>
+      <a href="/reportes">📈 Reportes</a>
+      <a href="#" class="logout-link" id="logoutBtn">🚪 Cerrar Sesión</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>💸 Registrar Gasto</h1>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Descripción</label>
+        <input type="text" id="descGasto" placeholder="Ej: Compra de leche">
+      </div>
+      <div class="form-group">
+        <label>Categoría</label>
+        <select id="catGasto">
+          <option value="Insumos">Insumos</option>
+          <option value="Servicios">Servicios</option>
+          <option value="Mantenimiento">Mantenimiento</option>
+          <option value="Otros">Otros</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Monto</label>
+        <input type="number" id="montoGasto" step="0.01" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label>&nbsp;</label>
+        <button class="btn" id="guardarGastoBtn">Guardar Gasto</button>
+      </div>
+    </div>
+
+    <h2>Historial de Gastos</h2>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th><th>Monto</th></tr></thead>
+        <tbody id="tablaGastos"><tr><td colspan="4">Cargando...</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script>
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const menuToggle = document.getElementById('menuToggle');
+
+    function toggleMenu() {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+
+    menuToggle.addEventListener('click', toggleMenu);
+    overlay.addEventListener('click', toggleMenu);
+
+    document.querySelectorAll('.sidebar nav a').forEach(link => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth <= 768) {
+          sidebar.classList.remove('open');
+          overlay.classList.remove('active');
+        }
+      });
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (confirm('¿Cerrar sesión?')) {
+        await fetch('/api/logout');
+        window.location.href = '/login';
+      }
+    });
+
+    function cargarGastos() {
+      fetch('/api/gastos')
+        .then(res => res.json())
+        .then(data => {
+          const tbody = document.getElementById('tablaGastos');
+          if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4">No hay gastos registrados</td></tr>';
+            return;
+          }
+          tbody.innerHTML = data.map(g => `
+            <tr>
+              <td>${new Date(g.fecha).toLocaleString()}</td>
+              <td>${g.descripcion}</td>
+              <td>${g.categoria}</td>
+              <td>Q${g.monto.toFixed(2)}</td>
+            </tr>
+          `).join('');
+        })
+        .catch(err => console.error(err));
+    }
+
+    document.getElementById('guardarGastoBtn').addEventListener('click', () => {
+      const descripcion = document.getElementById('descGasto').value.trim();
+      const categoria = document.getElementById('catGasto').value;
+      const monto = parseFloat(document.getElementById('montoGasto').value);
+      if (!descripcion || isNaN(monto) || monto <= 0) return alert('Completa todos los campos correctamente');
+      fetch('/api/gastos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ descripcion, categoria, monto })
+      })
+        .then(res => res.json())
+        .then(data => {
+          alert(data.mensaje);
+          document.getElementById('descGasto').value = '';
+          document.getElementById('montoGasto').value = '';
+          cargarGastos();
+        })
+        .catch(err => alert('Error: ' + err.message));
+    });
+
+    cargarGastos();
+  </script>
+</body>
+</html>

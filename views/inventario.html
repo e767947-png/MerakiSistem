@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inventario - Meraki SISTEM</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .btn-sm { padding: 2px 8px; font-size: 0.8rem; margin: 0 2px; }
+    table td, table th { padding: 8px 10px; }
+  </style>
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+  <button class="menu-toggle" id="menuToggle">☰</button>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="logo">☕ Meraki SISTEM</div>
+    <nav>
+      <a href="/">📊 Dashboard</a>
+      <a href="/ventas">🛒 Ventas</a>
+      <a href="/inventario" class="active">📦 Inventario</a>
+      <a href="/caja">💰 Caja</a>
+      <a href="/gastos">💸 Gastos</a>
+      <a href="/reportes">📈 Reportes</a>
+      <a href="#" class="logout-link" id="logoutBtn">🚪 Cerrar Sesión</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>📦 Inventario de Productos</h1>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Producto</th>
+            <th>Categoría</th>
+            <th>Precio</th>
+            <th>Existencia</th>
+            <th>Unidad</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tablaInventario"><tr><td colspan="8">Cargando...</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script>
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const menuToggle = document.getElementById('menuToggle');
+
+    function toggleMenu() {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+
+    menuToggle.addEventListener('click', toggleMenu);
+    overlay.addEventListener('click', toggleMenu);
+
+    document.querySelectorAll('.sidebar nav a').forEach(link => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth <= 768) {
+          sidebar.classList.remove('open');
+          overlay.classList.remove('active');
+        }
+      });
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (confirm('¿Cerrar sesión?')) {
+        await fetch('/api/logout');
+        window.location.href = '/login';
+      }
+    });
+
+    function cargarInventario() {
+      fetch('/api/inventario')
+        .then(res => res.json())
+        .then(data => {
+          const tbody = document.getElementById('tablaInventario');
+          if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8">No hay productos</td></tr>';
+            return;
+          }
+          tbody.innerHTML = data.map(p => `
+            <tr>
+              <td>${p.codigo}</td>
+              <td><strong>${p.nombre}</strong></td>
+              <td>${p.categoria}</td>
+              <td>Q${p.precio.toFixed(2)}</td>
+              <td>${p.existencia}</td>
+              <td>${p.unidad || 'unidad'}</td>
+              <td><span style="color:green;">${p.estado}</span></td>
+              <td>
+                <button class="btn btn-sm" onclick="ajustarStock(${p.id}, 1)">➕</button>
+                <button class="btn btn-sm btn-danger" onclick="ajustarStock(${p.id}, -1)">➖</button>
+                <button class="btn btn-sm" onclick="editarProducto(${p.id})">✏️ Editar</button>
+              </td>
+            </tr>
+          `).join('');
+        })
+        .catch(err => {
+          console.error(err);
+          document.getElementById('tablaInventario').innerHTML = '<tr><td colspan="8">Error al cargar inventario</td></tr>';
+        });
+    }
+
+    window.ajustarStock = function(id, cambio) {
+      const cantidad = prompt(`Ajustar stock (ingresa un número, positivo para agregar, negativo para restar):`, cambio);
+      if (cantidad === null) return;
+      const num = parseFloat(cantidad);
+      if (isNaN(num)) return alert('Ingresa un número válido');
+      fetch(`/api/productos/${id}/existencia`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cantidad: num })
+      })
+        .then(res => res.json())
+        .then(data => {
+          alert(data.mensaje);
+          cargarInventario();
+        })
+        .catch(err => alert('Error: ' + err.message));
+    };
+
+    window.editarProducto = function(id) {
+      alert('Función de edición en desarrollo.');
+    };
+
+    cargarInventario();
+  </script>
+</body>
+</html>

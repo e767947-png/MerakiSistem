@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Caja - Meraki SISTEM</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .caja-resumen {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin: 20px 0;
+    }
+    .caja-resumen .card {
+      background: #fff;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      border-left: 4px solid #f0b27a;
+    }
+    .caja-resumen .card .label {
+      font-size: 12px;
+      color: #6c7a8a;
+      text-transform: uppercase;
+    }
+    .caja-resumen .card .value {
+      font-size: 22px;
+      font-weight: bold;
+      margin-top: 5px;
+    }
+    .denominacion-row {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .denominacion-row label {
+      width: 100px;
+      font-weight: 600;
+    }
+    .denominacion-row input {
+      width: 80px;
+      padding: 6px;
+      border: 1px solid #d0d7de;
+      border-radius: 4px;
+      text-align: center;
+    }
+    .total-contado {
+      font-size: 1.2rem;
+      font-weight: bold;
+      margin-top: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+  <button class="menu-toggle" id="menuToggle">☰</button>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="logo">☕ Meraki SISTEM</div>
+    <nav>
+      <a href="/">📊 Dashboard</a>
+      <a href="/ventas">🛒 Ventas</a>
+      <a href="/inventario">📦 Inventario</a>
+      <a href="/caja" class="active">💰 Caja</a>
+      <a href="/gastos">💸 Gastos</a>
+      <a href="/reportes">📈 Reportes</a>
+      <a href="#" class="logout-link" id="logoutBtn">🚪 Cerrar Sesión</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>💰 Caja</h1>
+
+    <div style="display:flex; gap:10px; align-items:center; margin-bottom:20px;">
+      <label><strong>Fecha:</strong></label>
+      <input type="date" id="fechaCaja" value="">
+      <button class="btn" id="btnConsultar">Consultar</button>
+    </div>
+
+    <div id="infoCaja"><p>Cargando...</p></div>
+  </main>
+
+  <script>
+    const denominaciones = [
+      { label: 'Billetes de Q200', valor: 200 },
+      { label: 'Billetes de Q100', valor: 100 },
+      { label: 'Billetes de Q50', valor: 50 },
+      { label: 'Billetes de Q20', valor: 20 },
+      { label: 'Billetes de Q10', valor: 10 },
+      { label: 'Billetes de Q5', valor: 5 },
+      { label: 'Monedas de Q1', valor: 1 },
+      { label: 'Monedas de Q0.50', valor: 0.5 },
+      { label: 'Monedas de Q0.25', valor: 0.25 },
+      { label: 'Monedas de Q0.10', valor: 0.10 }
+    ];
+
+    const hoy = new Date().toISOString().slice(0,10);
+    document.getElementById('fechaCaja').value = hoy;
+
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const menuToggle = document.getElementById('menuToggle');
+
+    function toggleMenu() {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+
+    menuToggle.addEventListener('click', toggleMenu);
+    overlay.addEventListener('click', toggleMenu);
+
+    document.querySelectorAll('.sidebar nav a').forEach(link => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth <= 768) {
+          sidebar.classList.remove('open');
+          overlay.classList.remove('active');
+        }
+      });
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (confirm('¿Cerrar sesión?')) {
+        await fetch('/api/logout');
+        window.location.href = '/login';
+      }
+    });
+
+    function cargarCaja(fecha) {
+      if (!fecha) fecha = document.getElementById('fechaCaja').value || hoy;
+
+      fetch(`/api/caja/resumen?fecha=${fecha}`)
+        .then(res => res.json())
+        .then(data => {
+          const container = document.getElementById('infoCaja');
+          if (data.error) {
+            container.innerHTML = `<p style="color:red;">Error: ${data.error}</p>`;
+            return;
+          }
+
+          const caja = data.caja;
+          const estado = caja ? caja.estado : 'no_abierta';
+          const apertura = caja ? caja.apertura : 0;
+
+          let html = '';
+
+          html += `<div style="margin-bottom:20px;">
+            <h3>Estado: <span style="color:${estado === 'abierta' ? 'green' : (estado === 'cerrada' ? 'gray' : 'orange')}">
+              ${estado === 'abierta' ? '🟢 Abierta' : (estado === 'cerrada' ? '🔒 Cerrada' : '⭕ No abierta')}
+            </span></h3>
+            <p><strong>Apertura:</strong> Q${apertura.toFixed(2)}</p>
+          </div>`;
+
+          html += `<div class="caja-resumen">
+            <div class="card"><div class="label">💵 Efectivo</div><div class="value">Q${data.totalEfectivo.toFixed(2)}</div></div>
+            <div class="card"><div class="label">🏦 Transferencia</div><div class="value">Q${data.totalTransferencia.toFixed(2)}</div></div>
+            <div class="card"><div class="label">📱 Pedidos Ya</div><div class="value">Q${data.totalPedidosYa.toFixed(2)}</div></div>
+            <div class="card"><div class="label">💰 Total Ventas</div><div class="value">Q${data.totalVentas.toFixed(2)}</div></div>
+            <div class="card"><div class="label">💸 Gastos</div><div class="value">Q${data.totalGastos.toFixed(2)}</div></div>
+            <div class="card"><div class="label">📊 Efectivo Esperado</div><div class="value">Q${data.efectivoEsperado.toFixed(2)}</div></div>
+          </div>`;
+
+          if (estado === 'cerrada') {
+            html += `<div style="background:#f8f9fa; padding:15px; border-radius:8px; margin:15px 0;">
+              <h4>🔐 Caja cerrada</h4>
+              <p><strong>Cierre contado:</strong> Q${data.cierre.toFixed(2)}</p>
+              <p><strong>Diferencia:</strong> Q${(data.cierre - data.efectivoEsperado).toFixed(2)}</p>
+              <p><strong>Detalle de efectivo:</strong></p>
+              <ul>
+                ${data.detalleEfectivo && data.detalleEfectivo.length ? data.detalleEfectivo.map(d => 
+                  `<li>${d.cantidad} x Q${d.denominacion.toFixed(2)} = Q${(d.cantidad * d.denominacion).toFixed(2)}</li>`
+                ).join('') : '<li>Sin detalle</li>'}
+              </ul>
+            </div>`;
+          }
+
+          if (estado === 'abierta') {
+            html += `
+              <div style="margin-top:20px; border-top:1px solid #ddd; padding-top:20px;">
+                <h3>Acciones</h3>
+                <button class="btn" id="btnCerrarCaja">🔒 Cerrar Caja</button>
+              </div>
+              <div id="cerrarPanel" style="display:none; margin-top:20px; background:#f1f4f8; padding:20px; border-radius:8px;">
+                <h4>Conteo de efectivo</h4>
+                <div id="denominacionesContainer">
+                  ${denominaciones.map(d => `
+                    <div class="denominacion-row">
+                      <label>${d.label}</label>
+                      <input type="number" class="denom-input" data-valor="${d.valor}" value="0" min="0" step="1">
+                    </div>
+                  `).join('')}
+                </div>
+                <div class="total-contado">
+                  Total contado: <span id="totalContado">Q0.00</span>
+                </div>
+                <button class="btn" id="btnGuardarCierre" style="margin-top:15px;">✅ Guardar cierre</button>
+                <button class="btn" id="btnCancelarCierre" style="margin-top:15px; background:#ccc;">Cancelar</button>
+              </div>
+            `;
+          }
+
+          if (estado === 'no_abierta' || !caja) {
+            html += `
+              <div style="margin-top:20px; border-top:1px solid #ddd; padding-top:20px;">
+                <h3>Abir Caja</h3>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Monto inicial (efectivo)</label>
+                    <input type="number" id="montoApertura" step="0.01" placeholder="0.00" value="0">
+                  </div>
+                  <div class="form-group">
+                    <label>&nbsp;</label>
+                    <button class="btn" id="btnAbrirCaja">🚀 Abrir Caja</button>
+                  </div>
+                </div>
+              </div>
+            `;
+          }
+
+          container.innerHTML = html;
+
+          const abrirBtn = document.getElementById('btnAbrirCaja');
+          if (abrirBtn) {
+            abrirBtn.addEventListener('click', () => {
+              const monto = parseFloat(document.getElementById('montoApertura').value);
+              if (isNaN(monto) || monto < 0) return alert('Ingresa un monto válido');
+              fetch('/api/caja/apertura', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ monto_apertura: monto })
+              })
+                .then(res => res.json())
+                .then(data => {
+                  alert(data.mensaje || data.error);
+                  cargarCaja(fecha);
+                })
+                .catch(err => alert('Error: ' + err.message));
+            });
+          }
+
+          const cerrarBtn = document.getElementById('btnCerrarCaja');
+          if (cerrarBtn) {
+            cerrarBtn.addEventListener('click', () => {
+              document.getElementById('cerrarPanel').style.display = 'block';
+            });
+          }
+
+          const cancelarCierre = document.getElementById('btnCancelarCierre');
+          if (cancelarCierre) {
+            cancelarCierre.addEventListener('click', () => {
+              document.getElementById('cerrarPanel').style.display = 'none';
+            });
+          }
+
+          const denomInputs = document.querySelectorAll('.denom-input');
+          denomInputs.forEach(input => {
+            input.addEventListener('input', function() {
+              let total = 0;
+              document.querySelectorAll('.denom-input').forEach(inp => {
+                const valor = parseFloat(inp.dataset.valor);
+                const cantidad = parseInt(inp.value) || 0;
+                total += valor * cantidad;
+              });
+              const totalSpan = document.getElementById('totalContado');
+              if (totalSpan) totalSpan.textContent = `Q${total.toFixed(2)}`;
+            });
+          });
+
+          const guardarCierre = document.getElementById('btnGuardarCierre');
+          if (guardarCierre) {
+            guardarCierre.addEventListener('click', () => {
+              const detalle = [];
+              document.querySelectorAll('.denom-input').forEach(inp => {
+                const cantidad = parseInt(inp.value) || 0;
+                if (cantidad > 0) {
+                  detalle.push({
+                    denominacion: parseFloat(inp.dataset.valor),
+                    cantidad: cantidad
+                  });
+                }
+              });
+              if (detalle.length === 0) {
+                if (!confirm('No has ingresado ningún billete/moneda. ¿Deseas cerrar con Q0.00?')) return;
+              }
+              fetch('/api/caja/cierre', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ detalle_efectivo: detalle })
+              })
+                .then(res => res.json())
+                .then(data => {
+                  alert(data.mensaje || 'Caja cerrada');
+                  cargarCaja(fecha);
+                })
+                .catch(err => alert('Error: ' + err.message));
+            });
+          }
+        })
+        .catch(err => {
+          document.getElementById('infoCaja').innerHTML = `<p style="color:red;">Error al cargar: ${err.message}</p>`;
+        });
+    }
+
+    cargarCaja(hoy);
+
+    document.getElementById('btnConsultar').addEventListener('click', () => {
+      const fecha = document.getElementById('fechaCaja').value;
+      if (fecha) cargarCaja(fecha);
+    });
+
+    document.getElementById('fechaCaja').addEventListener('change', () => {
+      const fecha = document.getElementById('fechaCaja').value;
+      if (fecha) cargarCaja(fecha);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Meraki SISTEM</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+  <button class="menu-toggle" id="menuToggle">☰</button>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="logo">☕ Meraki SISTEM</div>
+    <nav>
+      <a href="/" class="active">📊 Dashboard</a>
+      <a href="/ventas">🛒 Ventas</a>
+      <a href="/inventario">📦 Inventario</a>
+      <a href="/caja">💰 Caja</a>
+      <a href="/gastos">💸 Gastos</a>
+      <a href="/reportes">📈 Reportes</a>
+      <a href="#" class="logout-link" id="logoutBtn">🚪 Cerrar Sesión</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>📊 Dashboard</h1>
+
+    <div class="card-grid" id="resumen">
+      <div class="card"><h3>Ganancias hoy</h3><div class="value" id="gananciasHoy">Q0.00</div></div>
+      <div class="card"><h3>Producto más vendido</h3><div class="value" id="topProducto">-</div></div>
+      <div class="card"><h3>Inventario bajo</h3><div class="value" id="invBajo">0</div></div>
+      <div class="card"><h3>Estado caja</h3><div class="value" id="estadoCaja">Cerrada</div></div>
+    </div>
+
+    <h2>Últimas ventas</h2>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead><tr><th>ID</th><th>Fecha</th><th>Método</th><th>Total</th></tr></thead>
+        <tbody id="tablaVentas"><tr><td colspan="4">Cargando...</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script>
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const menuToggle = document.getElementById('menuToggle');
+
+    function toggleMenu() {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+
+    menuToggle.addEventListener('click', toggleMenu);
+    overlay.addEventListener('click', toggleMenu);
+
+    document.querySelectorAll('.sidebar nav a').forEach(link => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth <= 768) {
+          sidebar.classList.remove('open');
+          overlay.classList.remove('active');
+        }
+      });
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (confirm('¿Cerrar sesión?')) {
+        await fetch('/api/logout');
+        window.location.href = '/login';
+      }
+    });
+
+    fetch('/api/dashboard')
+      .then(res => res.json())
+      .then(data => {
+        document.getElementById('gananciasHoy').textContent = 'Q' + data.ganancias_hoy.toFixed(2);
+        if (data.mas_vendidos && data.mas_vendidos.length > 0) {
+          document.getElementById('topProducto').textContent = data.mas_vendidos[0].nombre;
+        }
+        document.getElementById('invBajo').textContent = data.inventario_bajo ? data.inventario_bajo.length : 0;
+        const caja = data.caja_dia;
+        document.getElementById('estadoCaja').textContent = caja ? (caja.estado === 'abierta' ? 'Abierta' : 'Cerrada') : 'No abierta';
+
+        const tbody = document.getElementById('tablaVentas');
+        if (data.ultimas_ventas && data.ultimas_ventas.length) {
+          tbody.innerHTML = data.ultimas_ventas.map(v => `
+            <tr>
+              <td>${v.id}</td>
+              <td>${new Date(v.fecha).toLocaleString()}</td>
+              <td>${v.metodo_pago}</td>
+              <td>Q${v.total.toFixed(2)}</td>
+            </tr>
+          `).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="4">No hay ventas recientes</td></tr>';
+        }
+      })
+      .catch(err => console.error(err));
+  </script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iniciar Sesión - Meraki SISTEM</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { display: flex; justify-content: center; align-items: center; height: 100vh; background: #f4f7fa; }
+    .login-container { background: #fff; padding: 40px 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 100%; max-width: 380px; }
+    .login-container h1 { text-align: center; color: #1e2a3a; margin-bottom: 10px; font-size: 28px; }
+    .login-container .subtitle { text-align: center; color: #6c7a8a; margin-bottom: 30px; font-size: 14px; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; font-weight: 600; margin-bottom: 6px; color: #1e2a3a; }
+    .form-group input { width: 100%; padding: 10px 14px; border: 1px solid #dce1e8; border-radius: 6px; font-size: 15px; }
+    .form-group input:focus { border-color: #f0b27a; outline: none; }
+    .btn-login { width: 100%; padding: 12px; background: #f0b27a; color: #1e2a3a; border: none; border-radius: 6px; font-size: 16px; font-weight: 700; cursor: pointer; }
+    .btn-login:hover { background: #e09e5f; }
+    .error-msg { color: #e74c3c; text-align: center; margin-top: 15px; font-size: 14px; display: none; }
+    .logo { text-align: center; font-size: 48px; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="logo">☕</div>
+    <h1>Meraki SISTEM</h1>
+    <p class="subtitle">Sistema de Punto de Venta</p>
+    <form id="loginForm">
+      <div class="form-group">
+        <label>Usuario</label>
+        <input type="text" id="username" placeholder="Ingresa tu usuario">
+      </div>
+      <div class="form-group">
+        <label>Contraseña</label>
+        <input type="password" id="password" placeholder="Ingresa tu contraseña">
+      </div>
+      <button type="submit" class="btn-login">Iniciar Sesión</button>
+      <div id="errorMsg" class="error-msg">Credenciales incorrectas</div>
+    </form>
+  </div>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const errorMsg = document.getElementById('errorMsg');
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (data.success) {
+          window.location.href = '/';
+        } else {
+          errorMsg.style.display = 'block';
+          errorMsg.textContent = data.message || 'Credenciales incorrectas';
+        }
+      } catch (err) {
+        errorMsg.style.display = 'block';
+        errorMsg.textContent = 'Error al conectar con el servidor';
+      }
+    });
+  </script>
+</body>
+</html>

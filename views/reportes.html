@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reportes - Meraki SISTEM</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <!-- Librería para exportar a Excel -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+  <button class="menu-toggle" id="menuToggle">☰</button>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="logo">☕ Meraki SISTEM</div>
+    <nav>
+      <a href="/">📊 Dashboard</a>
+      <a href="/ventas">🛒 Ventas</a>
+      <a href="/inventario">📦 Inventario</a>
+      <a href="/caja">💰 Caja</a>
+      <a href="/gastos">💸 Gastos</a>
+      <a href="/reportes" class="active">📈 Reportes</a>
+      <a href="#" class="logout-link" id="logoutBtn">🚪 Cerrar Sesión</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>📈 Reporte de Ganancias</h1>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha inicio</label>
+        <input type="date" id="fechaInicio">
+      </div>
+      <div class="form-group">
+        <label>Fecha fin</label>
+        <input type="date" id="fechaFin">
+      </div>
+      <div class="form-group">
+        <label>&nbsp;</label>
+        <button class="btn" id="generarReporteBtn">Generar</button>
+        <button class="btn" id="exportarExcelBtn" style="background:#28a745; color:white;">📥 Exportar Excel</button>
+      </div>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table>
+        <thead><tr><th>Día</th><th>Total Ventas</th></tr></thead>
+        <tbody id="tablaReporte"><tr><td colspan="2">Selecciona un rango de fechas</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script>
+    let datosReporte = [];
+
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const menuToggle = document.getElementById('menuToggle');
+
+    function toggleMenu() {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+
+    menuToggle.addEventListener('click', toggleMenu);
+    overlay.addEventListener('click', toggleMenu);
+
+    document.querySelectorAll('.sidebar nav a').forEach(link => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth <= 768) {
+          sidebar.classList.remove('open');
+          overlay.classList.remove('active');
+        }
+      });
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (confirm('¿Cerrar sesión?')) {
+        await fetch('/api/logout');
+        window.location.href = '/login';
+      }
+    });
+
+    document.getElementById('generarReporteBtn').addEventListener('click', () => {
+      const inicio = document.getElementById('fechaInicio').value;
+      const fin = document.getElementById('fechaFin').value;
+      if (!inicio || !fin) return alert('Selecciona ambas fechas');
+      fetch(`/api/reportes/ganancias?inicio=${inicio}&fin=${fin}`)
+        .then(res => res.json())
+        .then(data => {
+          datosReporte = data;
+          const tbody = document.getElementById('tablaReporte');
+          if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="2">No hay datos en este período</td></tr>';
+            return;
+          }
+          let total = 0;
+          tbody.innerHTML = data.map(d => {
+            total += d.total_dia;
+            return `<tr><td>${d.dia}</td><td>Q${d.total_dia.toFixed(2)}</td></tr>`;
+          }).join('');
+          tbody.innerHTML += `<tr><td><strong>Total</strong></td><td><strong>Q${total.toFixed(2)}</strong></td></tr>`;
+        })
+        .catch(err => alert('Error: ' + err.message));
+    });
+
+    document.getElementById('exportarExcelBtn').addEventListener('click', () => {
+      if (datosReporte.length === 0) return alert('Primero genera un reporte');
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(datosReporte.map(d => ({
+        'Fecha': d.dia,
+        'Total Ventas': d.total_dia
+      })));
+      XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
+      XLSX.writeFile(wb, 'reporte_ventas.xlsx');
+    });
+  </script>
+</body>
+</html>

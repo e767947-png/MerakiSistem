@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ventas - Meraki SISTEM</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .tabla-ventas input[type="number"] { width: 60px; padding: 4px; text-align: center; }
+    .tabla-ventas .subtotal { font-weight: bold; }
+    .total-final { font-size: 1.4rem; font-weight: bold; color: #1e2a3a; }
+    .metodo-pago { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin: 15px 0; }
+    .metodo-pago label { margin-right: 10px; }
+  </style>
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+  <button class="menu-toggle" id="menuToggle">☰</button>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="logo">☕ Meraki SISTEM</div>
+    <nav>
+      <a href="/">📊 Dashboard</a>
+      <a href="/ventas" class="active">🛒 Ventas</a>
+      <a href="/inventario">📦 Inventario</a>
+      <a href="/caja">💰 Caja</a>
+      <a href="/gastos">💸 Gastos</a>
+      <a href="/reportes">📈 Reportes</a>
+      <a href="#" class="logout-link" id="logoutBtn">🚪 Cerrar Sesión</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>🛒 Registrar Venta</h1>
+
+    <table class="tabla-ventas">
+      <thead><tr><th>Producto</th><th>Precio (Q)</th><th>Cantidad</th><th>Subtotal</th></tr></thead>
+      <tbody id="productosVenta"><tr><td colspan="4">Cargando productos...</td></tr></tbody>
+      <tfoot><tr><td colspan="3" style="text-align:right;"><strong>Total</strong></td><td id="totalVentaDisplay" class="total-final">Q0.00</td></tr></tfoot>
+    </table>
+
+    <div class="metodo-pago">
+      <div>
+        <label><strong>Método de pago:</strong></label>
+        <select id="metodoPago">
+          <option value="Efectivo">Efectivo</option>
+          <option value="Transferencia">Transferencia</option>
+          <option value="Pedidos Ya">Pedidos Ya</option>
+        </select>
+      </div>
+      <div>
+        <label><strong>Descuento (Q):</strong></label>
+        <input type="number" id="descuentoInput" value="0" min="0" step="0.5" style="width:80px;">
+      </div>
+      <div>
+        <button class="btn" id="registrarVentaBtn" style="padding:10px 30px;">✅ Registrar Venta</button>
+      </div>
+    </div>
+
+    <hr style="margin:40px 0 20px;">
+    <h2>📋 Historial de ventas</h2>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead><tr><th>ID</th><th>Fecha</th><th>Método</th><th>Total</th><th>Acciones</th></tr></thead>
+        <tbody id="historialVentas"><tr><td colspan="5">Cargando...</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script>
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const menuToggle = document.getElementById('menuToggle');
+
+    function toggleMenu() {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+
+    menuToggle.addEventListener('click', toggleMenu);
+    overlay.addEventListener('click', toggleMenu);
+
+    document.querySelectorAll('.sidebar nav a').forEach(link => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth <= 768) {
+          sidebar.classList.remove('open');
+          overlay.classList.remove('active');
+        }
+      });
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (confirm('¿Cerrar sesión?')) {
+        await fetch('/api/logout');
+        window.location.href = '/login';
+      }
+    });
+
+    let productosVenta = [];
+    let total = 0;
+
+    function cargarProductos() {
+      fetch('/api/productos')
+        .then(res => res.json())
+        .then(data => {
+          productosVenta = data.filter(p => p.categoria !== 'Insumos');
+          const tbody = document.getElementById('productosVenta');
+          if (productosVenta.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4">No hay productos activos</td></tr>';
+            return;
+          }
+          let html = '';
+          productosVenta.forEach(p => {
+            html += `
+              <tr>
+                <td><strong>${p.nombre}</strong></td>
+                <td>Q${p.precio.toFixed(2)}</td>
+                <td>
+                  <input type="number" class="cantidad-input" data-id="${p.id}" data-precio="${p.precio}" value="0" min="0" max="${p.existencia}">
+                </td>
+                <td class="subtotal" id="subtotal-${p.id}">Q0.00</td>
+              </tr>
+            `;
+          });
+          tbody.innerHTML = html;
+          document.querySelectorAll('.cantidad-input').forEach(input => {
+            input.addEventListener('input', calcularTotales);
+          });
+          calcularTotales();
+        })
+        .catch(err => console.error(err));
+    }
+
+    function calcularTotales() {
+      let totalGeneral = 0;
+      document.querySelectorAll('.cantidad-input').forEach(input => {
+        const id = input.dataset.id;
+        const precio = parseFloat(input.dataset.precio);
+        const cantidad = parseInt(input.value) || 0;
+        const subtotal = cantidad * precio;
+        document.getElementById(`subtotal-${id}`).textContent = `Q${subtotal.toFixed(2)}`;
+        totalGeneral += subtotal;
+      });
+      total = totalGeneral;
+      const descuento = parseFloat(document.getElementById('descuentoInput').value) || 0;
+      const final = total - descuento;
+      document.getElementById('totalVentaDisplay').textContent = `Q${final.toFixed(2)}`;
+    }
+
+    document.getElementById('descuentoInput').addEventListener('input', calcularTotales);
+
+    document.getElementById('registrarVentaBtn').addEventListener('click', () => {
+      const items = [];
+      let hayProductos = false;
+      document.querySelectorAll('.cantidad-input').forEach(input => {
+        const cantidad = parseInt(input.value) || 0;
+        if (cantidad > 0) {
+          hayProductos = true;
+          items.push({
+            producto_id: parseInt(input.dataset.id),
+            cantidad: cantidad,
+            precio: parseFloat(input.dataset.precio)
+          });
+        }
+      });
+      if (!hayProductos) return alert('No has seleccionado cantidades de ningún producto.');
+
+      const metodo_pago = document.getElementById('metodoPago').value;
+      const descuento = parseFloat(document.getElementById('descuentoInput').value) || 0;
+
+      const payload = { productos: items, metodo_pago, descuento };
+
+      fetch('/api/ventas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(res => res.json())
+        .then(data => {
+          alert(data.mensaje || 'Venta registrada');
+          document.querySelectorAll('.cantidad-input').forEach(input => input.value = 0);
+          calcularTotales();
+          cargarHistorial();
+          cargarProductos();
+        })
+        .catch(err => alert('Error: ' + err.message));
+    });
+
+    function cargarHistorial() {
+      fetch('/api/ventas')
+        .then(res => res.json())
+        .then(data => {
+          const tbody = document.getElementById('historialVentas');
+          if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5">No hay ventas registradas</td></tr>';
+            return;
+          }
+          tbody.innerHTML = data.slice(0, 20).map(v => `
+            <tr>
+              <td>${v.id}</td>
+              <td>${new Date(v.fecha).toLocaleString()}</td>
+              <td>${v.metodo_pago}</td>
+              <td>Q${v.total.toFixed(2)}</td>
+              <td>
+                <button class="btn btn-sm" onclick="verDetalle(${v.id})">Ver</button>
+                <button class="btn btn-sm btn-danger" onclick="eliminarVenta(${v.id})">🗑️ Eliminar</button>
+              </td>
+            </tr>
+          `).join('');
+        })
+        .catch(err => console.error(err));
+    }
+
+    window.verDetalle = function(id) {
+      fetch(`/api/ventas/${id}/detalle`)
+        .then(res => res.json())
+        .then(data => {
+          let msg = `Detalle de venta #${id}:\n\n`;
+          data.forEach(d => {
+            msg += `${d.producto_nombre} x${d.cantidad}  Q${d.subtotal.toFixed(2)}\n`;
+          });
+          alert(msg);
+        });
+    };
+
+    window.eliminarVenta = function(id) {
+      if (!confirm('¿Estás seguro de eliminar esta venta? Se revertirá el inventario.')) return;
+      fetch(`/api/ventas/${id}`, { method: 'DELETE' })
+        .then(res => res.json())
+        .then(data => {
+          alert(data.mensaje || 'Venta eliminada');
+          cargarHistorial();
+          cargarProductos();
+        })
+        .catch(err => alert('Error: ' + err.message));
+    };
+
+    cargarProductos();
+    cargarHistorial();
+  </script>
+</body>
+</html>
