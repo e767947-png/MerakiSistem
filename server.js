@@ -455,30 +455,37 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
     );
 
     // Obtener recetas
-    const productoIds = venta.productos.map(p => p.producto_id);
-    const placeholders = productoIds.map(() => '?').join(',');
-    const recetasStmt = db.prepare(
-      `SELECT r.producto_id, r.ingrediente_id, r.cantidad
-       FROM recetas r
-       WHERE r.producto_id IN (${placeholders})`
-    );
-    const recetasRows = recetasStmt.all(...productoIds);
-    console.log("📋 Recetas encontradas:", recetasRows);
+// Obtener recetas
+const productoIds = venta.productos.map(p => p.producto_id);
+console.log("🔍 IDs de productos vendidos:", productoIds);
 
-    const productosConRecetas = new Set(recetasRows.map(r => r.producto_id));
-    const cantidadesPorProducto = {};
-    venta.productos.forEach(p => {
-      cantidadesPorProducto[p.producto_id] = p.cantidad;
-    });
+const placeholders = productoIds.map(() => '?').join(',');
+const recetasStmt = db.prepare(
+  `SELECT r.producto_id, r.ingrediente_id, r.cantidad
+   FROM recetas r
+   WHERE r.producto_id IN (${placeholders})`
+);
+const recetasRows = recetasStmt.all(...productoIds);
+console.log("📋 Recetas encontradas:", recetasRows);
 
-    // Descontar ingredientes (productos con recetas)
-    const ingredientes = {};
-    recetasRows.forEach(row => {
-      const cantidadVendida = cantidadesPorProducto[row.producto_id] || 0;
-      if (cantidadVendida === 0) return;
-      const totalIngrediente = row.cantidad * cantidadVendida;
-      ingredientes[row.ingrediente_id] = (ingredientes[row.ingrediente_id] || 0) + totalIngrediente;
-    });
+const productosConRecetas = new Set(recetasRows.map(r => r.producto_id));
+console.log("🔍 Productos con recetas (IDs):", [...productosConRecetas]);
+
+const cantidadesPorProducto = {};
+venta.productos.forEach(p => {
+  cantidadesPorProducto[p.producto_id] = p.cantidad;
+});
+console.log("📦 Cantidades por producto:", cantidadesPorProducto);
+
+// Descontar ingredientes (productos con recetas)
+const ingredientes = {};
+recetasRows.forEach(row => {
+  const cantidadVendida = cantidadesPorProducto[row.producto_id] || 0;
+  if (cantidadVendida === 0) return;
+  const totalIngrediente = row.cantidad * cantidadVendida;
+  ingredientes[row.ingrediente_id] = (ingredientes[row.ingrediente_id] || 0) + totalIngrediente;
+});
+console.log("🧂 Ingredientes a descontar:", ingredientes);
 
     for (const [ingredienteId, cantidad] of Object.entries(ingredientes)) {
       const row = db.prepare("SELECT existencia FROM productos WHERE id = ?").get(ingredienteId);
