@@ -13,8 +13,8 @@ app.use(
     secret: "meraki-sistem-secret-key",
     resave: false,
     saveUninitialized: false,
-    cookie: { 
-      secure: false,  // En Railway, si usas HTTPS, cambia a true
+    cookie: {
+      secure: false,
       maxAge: 24 * 60 * 60 * 1000,
       httpOnly: true,
       sameSite: 'lax'
@@ -636,7 +636,7 @@ app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
   }
 });
 
-// Dashboard (resumido)
+// Dashboard
 app.get("/api/dashboard", isAuthenticated, (req, res) => {
   const hoy = new Date().toISOString().slice(0, 10);
   try {
