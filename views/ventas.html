@@ -92,7 +92,7 @@
     document.getElementById('logoutBtn').addEventListener('click', async (e) => {
       e.preventDefault();
       if (confirm('¿Cerrar sesión?')) {
-        await fetch('/api/logout');
+        await fetch('/api/logout', { credentials: 'include' });
         window.location.href = '/login';
       }
     });
@@ -100,8 +100,13 @@
     let productosVenta = [];
     let total = 0;
 
+    // ✅ Función auxiliar para fetch con credenciales
+    function fetchWithCreds(url, options = {}) {
+      return fetch(url, { ...options, credentials: 'include' });
+    }
+
     function cargarProductos() {
-      fetch('/api/productos')
+      fetchWithCreds('/api/productos')
         .then(res => res.json())
         .then(data => {
           productosVenta = data.filter(p => p.categoria !== 'Insumos');
@@ -171,7 +176,7 @@
 
       const payload = { productos: items, metodo_pago, descuento };
 
-      fetch('/api/ventas', {
+      fetchWithCreds('/api/ventas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -188,7 +193,7 @@
     });
 
     function cargarHistorial() {
-      fetch('/api/ventas')
+      fetchWithCreds('/api/ventas')
         .then(res => res.json())
         .then(data => {
           const tbody = document.getElementById('historialVentas');
@@ -213,7 +218,7 @@
     }
 
     window.verDetalle = function(id) {
-      fetch(`/api/ventas/${id}/detalle`)
+      fetchWithCreds(`/api/ventas/${id}/detalle`)
         .then(res => res.json())
         .then(data => {
           let msg = `Detalle de venta #${id}:\n\n`;
@@ -224,11 +229,10 @@
         });
     };
 
-    // ✅ FUNCIÓN ELIMINAR VENTA (definida globalmente)
     window.eliminarVenta = function(id) {
       console.log('🗑️ Eliminar venta ID:', id);
       if (!confirm('¿Estás seguro de eliminar esta venta? Se revertirá el inventario.')) return;
-      fetch(`/api/ventas/${id}`, { method: 'DELETE' })
+      fetchWithCreds(`/api/ventas/${id}`, { method: 'DELETE' })
         .then(res => res.json())
         .then(data => {
           alert(data.mensaje || 'Venta eliminada');

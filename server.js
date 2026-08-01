@@ -13,7 +13,12 @@ app.use(
     secret: "meraki-sistem-secret-key",
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 },
+    cookie: { 
+      secure: false,  // En Railway, si usas HTTPS, cambia a true
+      maxAge: 24 * 60 * 60 * 1000,
+      httpOnly: true,
+      sameSite: 'lax'
+    },
   })
 );
 
@@ -22,10 +27,12 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // ---------- MIDDLEWARE DE AUTENTICACIÓN ----------
 function isAuthenticated(req, res, next) {
+  console.log(`🔍 Verificando autenticación: session.user =`, req.session?.user);
   if (req.session && req.session.user) {
     return next();
   }
-  res.status(401).json({ error: "No autorizado" });
+  console.log(`❌ No autorizado - sesión no encontrada`);
+  res.status(401).json({ error: "No autorizado - Inicia sesión nuevamente" });
 }
 
 // ---------- BASE DE DATOS ----------
@@ -244,49 +251,42 @@ db.exec(`
   SELECT (SELECT id FROM productos WHERE codigo = '7'), (SELECT id FROM productos WHERE nombre = 'Hielo'), 8
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '7'), (SELECT id FROM productos WHERE nombre = 'Crema Batida'), 2
-  -- Café Americano Pequeño (10)
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '10'), (SELECT id FROM productos WHERE nombre = 'Café en Grano'), 1
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '10'), (SELECT id FROM productos WHERE nombre = 'Vasos Café Pequeño'), 1
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '10'), (SELECT id FROM productos WHERE nombre = 'Hielo'), 2
-  -- Café Americano Grande (11)
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '11'), (SELECT id FROM productos WHERE nombre = 'Café en Grano'), 2
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '11'), (SELECT id FROM productos WHERE nombre = 'Vasos Café Grande'), 1
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '11'), (SELECT id FROM productos WHERE nombre = 'Hielo'), 4
-  -- Capuchino Pequeño (12)
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '12'), (SELECT id FROM productos WHERE nombre = 'Café en Grano'), 1
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '12'), (SELECT id FROM productos WHERE nombre = 'Leche Verde'), 5
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '12'), (SELECT id FROM productos WHERE nombre = 'Vasos Café Pequeño'), 1
-  -- Capuchino Grande (13)
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '13'), (SELECT id FROM productos WHERE nombre = 'Café en Grano'), 2
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '13'), (SELECT id FROM productos WHERE nombre = 'Leche Verde'), 8
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '13'), (SELECT id FROM productos WHERE nombre = 'Vasos Café Grande'), 1
-  -- Cocoa Pequeño (14)
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '14'), (SELECT id FROM productos WHERE nombre = 'Leche Verde'), 4
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '14'), (SELECT id FROM productos WHERE nombre = 'Salsa Dulce'), 2
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '14'), (SELECT id FROM productos WHERE nombre = 'Vasos Café Pequeño'), 1
-  -- Cocoa Grande (15)
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '15'), (SELECT id FROM productos WHERE nombre = 'Leche Verde'), 6
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '15'), (SELECT id FROM productos WHERE nombre = 'Salsa Dulce'), 3
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '15'), (SELECT id FROM productos WHERE nombre = 'Vasos Café Grande'), 1
-  -- Combo Postre+Café (20)
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '20'), (SELECT id FROM productos WHERE nombre = 'Café en Grano'), 1
   UNION ALL
@@ -295,7 +295,6 @@ db.exec(`
   SELECT (SELECT id FROM productos WHERE codigo = '20'), (SELECT id FROM productos WHERE nombre = 'Hielo'), 2
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '20'), (SELECT id FROM productos WHERE nombre = 'Postre del día'), 1
-  -- Papas Meraki (21)
   UNION ALL
   SELECT (SELECT id FROM productos WHERE codigo = '21'), (SELECT id FROM productos WHERE nombre = 'Papas'), 8
   UNION ALL
@@ -311,10 +310,13 @@ console.log("✅ Base de datos y recetas inicializadas.");
 // ---------- RUTAS DE AUTENTICACIÓN ----------
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body;
+  console.log(`🔐 Intento de login: ${username}`);
   if (username === "Admin" && password === "Milanessa1") {
     req.session.user = { username: "Admin", role: "admin" };
+    console.log(`✅ Login exitoso para ${username}`);
     res.json({ success: true, message: "Login exitoso" });
   } else {
+    console.log(`❌ Login fallido para ${username}`);
     res.status(401).json({ success: false, message: "Credenciales incorrectas" });
   }
 });
@@ -426,22 +428,16 @@ app.put("/api/productos/:id/existencia", isAuthenticated, (req, res) => {
   }
 });
 
-// Registrar venta (con logs de depuración)
+// Registrar venta
 app.post("/api/ventas", isAuthenticated, (req, res) => {
+  const venta = req.body;
+  console.log("📝 Venta recibida:", JSON.stringify(venta, null, 2));
+
+  const subtotal = venta.productos.reduce((sum, p) => sum + p.cantidad * p.precio, 0);
+  const total = subtotal - (venta.descuento || 0);
+  const fecha = venta.fecha || new Date().toISOString();
+
   try {
-    const venta = req.body;
-    console.log("📝 Venta recibida:", JSON.stringify(venta, null, 2));
-
-    // Validar que existan productos
-    if (!venta.productos || venta.productos.length === 0) {
-      return res.status(400).json({ error: "La venta debe tener al menos un producto" });
-    }
-
-    const subtotal = venta.productos.reduce((sum, p) => sum + p.cantidad * p.precio, 0);
-    const total = subtotal - (venta.descuento || 0);
-    const fecha = venta.fecha || new Date().toISOString();
-
-    // Insertar venta
     const insertVenta = db.prepare(
       `INSERT INTO ventas (fecha, metodo_pago, descuento, subtotal, total)
        VALUES (?, ?, ?, ?, ?)`
@@ -450,7 +446,6 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
     const ventaId = result.lastInsertRowid;
     console.log(`✅ Venta #${ventaId} insertada`);
 
-    // Insertar detalle y descontar inventario
     const insertDetalle = db.prepare(
       `INSERT INTO detalle_ventas (venta_id, producto_id, cantidad, precio, subtotal)
        VALUES (?, ?, ?, ?, ?)`
@@ -459,7 +454,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
       `UPDATE productos SET existencia = existencia - ? WHERE id = ?`
     );
 
-    // Obtener recetas para los productos vendidos
+    // Obtener recetas
     const productoIds = venta.productos.map(p => p.producto_id);
     const placeholders = productoIds.map(() => '?').join(',');
     const recetasStmt = db.prepare(
@@ -476,7 +471,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
       cantidadesPorProducto[p.producto_id] = p.cantidad;
     });
 
-    // 1. Descontar ingredientes (productos con recetas)
+    // Descontar ingredientes (productos con recetas)
     const ingredientes = {};
     recetasRows.forEach(row => {
       const cantidadVendida = cantidadesPorProducto[row.producto_id] || 0;
@@ -487,9 +482,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
 
     for (const [ingredienteId, cantidad] of Object.entries(ingredientes)) {
       const row = db.prepare("SELECT existencia FROM productos WHERE id = ?").get(ingredienteId);
-      if (!row) {
-        throw new Error(`Ingrediente con ID ${ingredienteId} no encontrado`);
-      }
+      if (!row) throw new Error(`Ingrediente ${ingredienteId} no encontrado`);
       if (row.existencia < cantidad) {
         throw new Error(`Stock insuficiente para ingrediente ID ${ingredienteId}. Disponible: ${row.existencia}, necesario: ${cantidad}`);
       }
@@ -497,7 +490,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
       console.log(`✅ Descontado ${cantidad} del ingrediente ID ${ingredienteId}`);
     }
 
-    // 2. Descontar productos simples (sin recetas y que NO son insumos)
+    // Descontar productos simples (sin recetas y que NO son insumos)
     const productosSimples = venta.productos.filter(p => {
       const tieneReceta = productosConRecetas.has(p.producto_id);
       const productoInfo = db.prepare("SELECT categoria FROM productos WHERE id = ?").get(p.producto_id);
@@ -509,9 +502,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
 
     for (const p of productosSimples) {
       const row = db.prepare("SELECT existencia FROM productos WHERE id = ?").get(p.producto_id);
-      if (!row) {
-        throw new Error(`Producto con ID ${p.producto_id} no encontrado`);
-      }
+      if (!row) throw new Error(`Producto ${p.producto_id} no encontrado`);
       if (row.existencia < p.cantidad) {
         throw new Error(`Stock insuficiente para producto ID ${p.producto_id}. Disponible: ${row.existencia}, necesario: ${p.cantidad}`);
       }
@@ -589,7 +580,6 @@ app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
   const ventaId = req.params.id;
   console.log(`🗑️ Eliminando venta #${ventaId}`);
   try {
-    // Obtener detalles de la venta
     const detalles = db.prepare(
       `SELECT d.producto_id, d.cantidad, p.categoria
        FROM detalle_ventas d
@@ -622,7 +612,6 @@ app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
       }
     }
 
-    // Eliminar detalles y la venta
     db.prepare("DELETE FROM detalle_ventas WHERE venta_id = ?").run(ventaId);
     const result = db.prepare("DELETE FROM ventas WHERE id = ?").run(ventaId);
 
@@ -630,7 +619,6 @@ app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
       return res.status(404).json({ error: "Venta no encontrada" });
     }
 
-    // Revertir impacto en caja (si era efectivo y la caja aún está abierta)
     const venta = db.prepare("SELECT metodo_pago, total, fecha FROM ventas WHERE id = ?").get(ventaId);
     if (venta && venta.metodo_pago === 'Efectivo') {
       const cajaRow = db.prepare(
@@ -648,7 +636,7 @@ app.delete("/api/ventas/:id", isAuthenticated, (req, res) => {
   }
 });
 
-// Dashboard (resumido por brevedad)
+// Dashboard (resumido)
 app.get("/api/dashboard", isAuthenticated, (req, res) => {
   const hoy = new Date().toISOString().slice(0, 10);
   try {
