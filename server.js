@@ -432,6 +432,44 @@ app.put("/api/productos/:id/existencia", isAuthenticated, (req, res) => {
 // Registrar venta
 app.post("/api/ventas", isAuthenticated, (req, res) => {
   const venta = req.body;
+
+  // ========== VENTA POR MONTO (sin productos) ==========
+  if (venta.tipo === 'monto') {
+    // Insertar directamente en ventas sin detalle
+    const fecha = venta.fecha || new Date().toISOString();
+    const total = venta.total || 0;
+    const subtotal = venta.monto || 0;
+    const descuento = venta.descuento || 0;
+
+    try {
+      const insertVenta = db.prepare(
+        `INSERT INTO ventas (fecha, metodo_pago, descuento, subtotal, total)
+         VALUES (?, ?, ?, ?, ?)`
+      );
+      const result = insertVenta.run(fecha, venta.metodo_pago, descuento, subtotal, total);
+      const ventaId = result.lastInsertRowid;
+
+      // Actualizar caja (ingresos) si es efectivo
+      if (venta.metodo_pago === 'Efectivo') {
+        const cajaRow = db.prepare(
+          "SELECT id FROM caja WHERE date(fecha) = date(?) AND estado = 'abierta'"
+        ).get(fecha);
+        if (cajaRow) {
+          db.prepare("UPDATE caja SET ingresos = ingresos + ? WHERE id = ?").run(total, cajaRow.id);
+        }
+      }
+
+      res.json({ mensaje: "Venta por monto registrada correctamente", id: ventaId });
+      return;
+    } catch (err) {
+      console.error('❌ Error en venta por monto:', err);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+  
+
+  // ========== VENTA NORMAL (con productos) ==========
+  // ... (el código que ya tienes para ventas con productos)
   console.log("📝 Venta recibida:", JSON.stringify(venta, null, 2));
 
   const subtotal = venta.productos.reduce((sum, p) => sum + p.cantidad * p.precio, 0);

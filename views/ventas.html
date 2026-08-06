@@ -65,6 +65,67 @@
       </div>
     </div>
 
+    <!-- ========================================== -->
+<!-- AQUÍ TERMINA EL FORMULARIO DE PRODUCTOS -->
+<!-- ========================================== -->
+<div class="metodo-pago">
+  <div>
+    <label><strong>Método de pago:</strong></label>
+    <select id="metodoPago">
+      <option value="Efectivo">Efectivo</option>
+      <option value="Transferencia">Transferencia</option>
+      <option value="Pedidos Ya">Pedidos Ya</option>
+    </select>
+  </div>
+  <div>
+    <label><strong>Descuento (Q):</strong></label>
+    <input type="number" id="descuentoInput" value="0" min="0" step="0.5" style="width:80px;">
+  </div>
+  <div>
+    <button class="btn" id="registrarVentaBtn" style="padding:10px 30px;">✅ Registrar Venta</button>
+  </div>
+</div>
+
+<!-- ========================================== -->
+<!-- ⬇️ NUEVO: AQUÍ SE AGREGA LA VENTA POR MONTO -->
+<!-- ========================================== -->
+<hr style="margin:40px 0 20px; border-top: 2px dashed #ccc;">
+<h2 style="color:#28a745;">➕ Venta por Monto (sin detalle de productos)</h2>
+<p style="color:#6c7a8a; font-size:14px; margin-bottom:15px;">Registra ventas de días anteriores o ventas sin detalle de productos. <strong>No afecta el inventario.</strong></p>
+
+<div class="form-row">
+  <div class="form-group">
+    <label>📅 Fecha</label>
+    <input type="date" id="fechaMonto" value="">
+  </div>
+  <div class="form-group">
+    <label>💰 Monto total (Q)</label>
+    <input type="number" id="montoVenta" step="0.01" placeholder="0.00" style="font-size:18px; font-weight:bold;">
+  </div>
+  <div class="form-group">
+    <label>💳 Método de pago</label>
+    <select id="metodoPagoMonto">
+      <option value="Efectivo">Efectivo</option>
+      <option value="Transferencia">Transferencia</option>
+      <option value="Pedidos Ya">Pedidos Ya</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label>🏷️ Descuento (Q)</label>
+    <input type="number" id="descuentoMonto" value="0" min="0" step="0.5" style="width:80px;">
+  </div>
+  <div class="form-group" style="display:flex; align-items:flex-end;">
+    <button class="btn" id="registrarVentaMontoBtn" style="padding:12px 30px; background:#28a745; color:white; font-weight:bold; font-size:16px;">✅ Registrar Venta por Monto</button>
+  </div>
+</div>
+
+<!-- ========================================== -->
+<!-- AQUÍ SIGUE EL HISTORIAL DE VENTAS -->
+<!-- ========================================== -->
+<hr style="margin:40px 0 20px;">
+<h2>📋 Historial de ventas</h2>
+<!-- ... tabla de historial ... -->
+
     <hr style="margin:40px 0 20px;">
     <h2>📋 Historial de ventas</h2>
     <div style="overflow-x:auto;">
@@ -231,17 +292,21 @@
         .catch(err => console.error(err));
     }
 
-    window.verDetalle = function(id) {
-      fetchWithCreds(`/api/ventas/${id}/detalle`)
-        .then(res => res.json())
-        .then(data => {
-          let msg = `Detalle de venta #${id}:\n\n`;
-          data.forEach(d => {
-            msg += `${d.producto_nombre} x${d.cantidad}  Q${d.subtotal.toFixed(2)}\n`;
-          });
-          alert(msg);
+   window.verDetalle = function(id) {
+  fetch(`/api/ventas/${id}/detalle`)
+    .then(res => res.json())
+    .then(data => {
+      let msg = `Detalle de venta #${id}:\n\n`;
+      if (data.length === 0) {
+        msg += 'Esta es una venta por monto (sin detalle de productos).';
+      } else {
+        data.forEach(d => {
+          msg += `${d.producto_nombre} x${d.cantidad}  Q${d.subtotal.toFixed(2)}\n`;
         });
-    };
+      }
+      alert(msg);
+    });
+};
 
     window.eliminarVenta = function(id) {
       console.log('🗑️ Eliminar venta ID:', id);
@@ -258,6 +323,48 @@
           alert('Error: ' + err.message);
         });
     };
+
+    // ===========================================
+    // VENTA POR MONTO (sin detalle de productos)
+    // ===========================================
+    // Establecer fecha actual por defecto
+    document.getElementById('fechaMonto').value = new Date().toISOString().slice(0,10);
+
+    document.getElementById('registrarVentaMontoBtn').addEventListener('click', () => {
+      const fecha = document.getElementById('fechaMonto').value;
+      const monto = parseFloat(document.getElementById('montoVenta').value);
+      const metodo_pago = document.getElementById('metodoPagoMonto').value;
+      const descuento = parseFloat(document.getElementById('descuentoMonto').value) || 0;
+
+      if (!fecha) return alert('Selecciona una fecha');
+      if (isNaN(monto) || monto <= 0) return alert('Ingresa un monto válido');
+
+      const total = monto - descuento;
+
+      const payload = {
+        tipo: 'monto',
+        fecha: fecha,
+        monto: monto,
+        metodo_pago: metodo_pago,
+        descuento: descuento,
+        total: total
+      };
+
+      fetch('/api/ventas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(res => res.json())
+        .then(data => {
+          alert(data.mensaje || 'Venta por monto registrada');
+          document.getElementById('montoVenta').value = '';
+          document.getElementById('descuentoMonto').value = 0;
+          cargarHistorial();
+          cargarProductos();
+        })
+        .catch(err => alert('Error: ' + err.message));
+    });
 
     cargarProductos();
     cargarHistorial();
