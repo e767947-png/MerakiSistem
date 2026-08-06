@@ -44,6 +44,13 @@
         <input type="number" id="montoGasto" step="0.01" placeholder="0.00">
       </div>
       <div class="form-group">
+        <label>Tipo de Gasto</label>
+        <select id="tipoGasto">
+          <option value="Diario">Diario (resta de caja)</option>
+          <option value="General">General (solo registro)</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label>&nbsp;</label>
         <button class="btn" id="guardarGastoBtn">Guardar Gasto</button>
       </div>
@@ -52,8 +59,8 @@
     <h2>Historial de Gastos</h2>
     <div style="overflow-x:auto;">
       <table>
-        <thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th><th>Monto</th></tr></thead>
-        <tbody id="tablaGastos"><tr><td colspan="4">Cargando...</td></tr></tbody>
+        <thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th><th>Tipo</th><th>Monto</th></tr></thead>
+        <tbody id="tablaGastos"><tr><td colspan="5">Cargando...</td></tr></tbody>
       </table>
     </div>
   </main>
@@ -83,18 +90,22 @@
     document.getElementById('logoutBtn').addEventListener('click', async (e) => {
       e.preventDefault();
       if (confirm('¿Cerrar sesión?')) {
-        await fetch('/api/logout');
+        await fetch('/api/logout', { credentials: 'include' });
         window.location.href = '/login';
       }
     });
 
+    function fetchWithCreds(url, options = {}) {
+      return fetch(url, { ...options, credentials: 'include' });
+    }
+
     function cargarGastos() {
-      fetch('/api/gastos')
+      fetchWithCreds('/api/gastos')
         .then(res => res.json())
         .then(data => {
           const tbody = document.getElementById('tablaGastos');
           if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4">No hay gastos registrados</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5">No hay gastos registrados</td></tr>';
             return;
           }
           tbody.innerHTML = data.map(g => `
@@ -102,6 +113,7 @@
               <td>${new Date(g.fecha).toLocaleString()}</td>
               <td>${g.descripcion}</td>
               <td>${g.categoria}</td>
+              <td>${g.tipo || 'Diario'}</td>
               <td>Q${g.monto.toFixed(2)}</td>
             </tr>
           `).join('');
@@ -113,11 +125,14 @@
       const descripcion = document.getElementById('descGasto').value.trim();
       const categoria = document.getElementById('catGasto').value;
       const monto = parseFloat(document.getElementById('montoGasto').value);
+      const tipo = document.getElementById('tipoGasto').value;
+
       if (!descripcion || isNaN(monto) || monto <= 0) return alert('Completa todos los campos correctamente');
-      fetch('/api/gastos', {
+
+      fetchWithCreds('/api/gastos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ descripcion, categoria, monto })
+        body: JSON.stringify({ descripcion, categoria, monto, tipo })
       })
         .then(res => res.json())
         .then(data => {

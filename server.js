@@ -81,7 +81,8 @@ db.exec(`
     fecha TEXT,
     descripcion TEXT,
     categoria TEXT,
-    monto REAL
+    monto REAL,
+    tipo TEXT DEFAULT 'Diario'
   );
 
   CREATE TABLE IF NOT EXISTS caja (
@@ -717,19 +718,24 @@ app.get("/api/gastos", isAuthenticated, (req, res) => {
 });
 
 app.post("/api/gastos", isAuthenticated, (req, res) => {
-  const { descripcion, categoria, monto } = req.body;
+  const { descripcion, categoria, monto, tipo } = req.body;
   const fecha = new Date().toISOString();
+  const gastoTipo = tipo || 'Diario'; // por defecto Diario
+
   try {
     const insertGasto = db.prepare(
-      "INSERT INTO gastos (fecha, descripcion, categoria, monto) VALUES (?, ?, ?, ?)"
+      "INSERT INTO gastos (fecha, descripcion, categoria, monto, tipo) VALUES (?, ?, ?, ?, ?)"
     );
-    const result = insertGasto.run(fecha, descripcion, categoria, monto);
+    const result = insertGasto.run(fecha, descripcion, categoria, monto, gastoTipo);
 
-    const cajaRow = db.prepare(
-      "SELECT id FROM caja WHERE date(fecha) = date(?) AND estado = 'abierta'"
-    ).get(fecha);
-    if (cajaRow) {
-      db.prepare("UPDATE caja SET egresos = egresos + ? WHERE id = ?").run(monto, cajaRow.id);
+    // Solo si es gasto DIARIO, afecta la caja (egresos)
+    if (gastoTipo === 'Diario') {
+      const cajaRow = db.prepare(
+        "SELECT id FROM caja WHERE date(fecha) = date(?) AND estado = 'abierta'"
+      ).get(fecha);
+      if (cajaRow) {
+        db.prepare("UPDATE caja SET egresos = egresos + ? WHERE id = ?").run(monto, cajaRow.id);
+      }
     }
 
     res.json({ mensaje: "Gasto registrado", id: result.lastInsertRowid });
@@ -764,10 +770,11 @@ app.get("/api/caja/resumen", isAuthenticated, (req, res) => {
     const totalVentas = totalEfectivo + totalTransferencia + totalPedidosYa;
 
     const gastosRow = db.prepare(
-      `SELECT COALESCE(SUM(monto),0) as total_gastos
-       FROM gastos
-       WHERE date(fecha) = date(?)`
-    ).get(hoy);
+  `SELECT COALESCE(SUM(monto),0) as total_gastos
+   FROM gastos
+   WHERE date(fecha) = date(?) AND tipo = 'Diario'`
+).get(hoy);
+
     const totalGastos = gastosRow.total_gastos || 0;
 
     const apertura = caja ? caja.apertura : 0;
