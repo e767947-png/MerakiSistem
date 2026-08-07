@@ -466,7 +466,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
       return res.status(500).json({ error: err.message });
     }
   }
-  
+
 
   // ========== VENTA NORMAL (con productos) ==========
   // ... (el código que ya tienes para ventas con productos)
@@ -757,7 +757,7 @@ app.get("/api/gastos", isAuthenticated, (req, res) => {
 
 app.post("/api/gastos", isAuthenticated, (req, res) => {
   const { descripcion, categoria, monto, tipo } = req.body;
-  const fecha = new Date().toISOString();
+    const fechaGasto = fecha || new Date().toISOString(); // Si no viene fecha, usa la actual
   const gastoTipo = tipo || 'Diario'; // por defecto Diario
 
   try {
