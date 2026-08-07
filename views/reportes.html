@@ -5,8 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Reportes - Meraki SISTEM</title>
   <link rel="stylesheet" href="/css/style.css">
-  <!-- Librería para exportar a Excel -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    .resumen-totales {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin: 20px 0;
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 10px;
+    }
+    .resumen-totales .item {
+      text-align: center;
+    }
+    .resumen-totales .label {
+      font-size: 14px;
+      color: #6c7a8a;
+    }
+    .resumen-totales .value {
+      font-size: 24px;
+      font-weight: bold;
+    }
+    .value.positivo { color: #28a745; }
+    .value.negativo { color: #dc3545; }
+    .value.neutro { color: #6c7a8a; }
+  </style>
 </head>
 <body>
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
@@ -26,7 +50,7 @@
   </aside>
 
   <main class="main">
-    <h1>📈 Reporte de Ganancias</h1>
+    <h1>📈 Reporte de Ventas y Gastos</h1>
     <div class="form-row">
       <div class="form-group">
         <label>Fecha inicio</label>
@@ -43,10 +67,40 @@
       </div>
     </div>
 
+    <!-- Resumen de totales -->
+    <div id="resumenTotales" class="resumen-totales" style="display:none;">
+      <div class="item">
+        <div class="label">💵 Total Ventas</div>
+        <div class="value" id="totalVentas">Q0.00</div>
+      </div>
+      <div class="item">
+        <div class="label">💸 Total Gastos</div>
+        <div class="value" id="totalGastos">Q0.00</div>
+      </div>
+      <div class="item">
+        <div class="label">📊 Ganancia Neta</div>
+        <div class="value" id="gananciaNeta">Q0.00</div>
+      </div>
+      <div class="item">
+        <div class="label">📅 Días</div>
+        <div class="value" id="totalDias">0</div>
+      </div>
+    </div>
+
+    <!-- Tabla de detalle -->
     <div style="overflow-x:auto;">
       <table>
-        <thead><tr><th>Día</th><th>Total Ventas</th></tr></thead>
-        <tbody id="tablaReporte"><tr><td colspan="2">Selecciona un rango de fechas</td></tr></tbody>
+        <thead>
+          <tr>
+            <th>Día</th>
+            <th>Ventas (Q)</th>
+            <th>Gastos (Q)</th>
+            <th>Ganancia Neta (Q)</th>
+          </tr>
+        </thead>
+        <tbody id="tablaReporte">
+          <tr><td colspan="4">Selecciona un rango de fechas</td></tr>
+        </tbody>
       </table>
     </div>
   </main>
@@ -54,6 +108,7 @@
   <script>
     let datosReporte = [];
 
+    // ---------- TOGGLE MENÚ ----------
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');
     const menuToggle = document.getElementById('menuToggle');
@@ -62,7 +117,6 @@
       sidebar.classList.toggle('open');
       overlay.classList.toggle('active');
     }
-
     menuToggle.addEventListener('click', toggleMenu);
     overlay.addEventListener('click', toggleMenu);
 
@@ -75,47 +129,89 @@
       });
     });
 
+    // ---------- LOGOUT ----------
     document.getElementById('logoutBtn').addEventListener('click', async (e) => {
       e.preventDefault();
       if (confirm('¿Cerrar sesión?')) {
-        await fetch('/api/logout');
+        await fetch('/api/logout', { credentials: 'include' });
         window.location.href = '/login';
       }
     });
 
+    // ---------- GENERAR REPORTE ----------
     document.getElementById('generarReporteBtn').addEventListener('click', () => {
       const inicio = document.getElementById('fechaInicio').value;
       const fin = document.getElementById('fechaFin').value;
       if (!inicio || !fin) return alert('Selecciona ambas fechas');
-      fetch(`/api/reportes/ganancias?inicio=${inicio}&fin=${fin}`)
+
+      fetch(`/api/reportes/resumen?inicio=${inicio}&fin=${fin}`, { credentials: 'include' })
         .then(res => res.json())
         .then(data => {
-          datosReporte = data;
+          if (data.error) return alert('Error: ' + data.error);
+          datosReporte = data.detalle || [];
+
+          // Mostrar resumen de totales
+          document.getElementById('resumenTotales').style.display = 'grid';
+          document.getElementById('totalVentas').textContent = 'Q' + data.totalVentas.toFixed(2);
+          document.getElementById('totalGastos').textContent = 'Q' + data.totalGastos.toFixed(2);
+
+          const ganancia = data.gananciaNeta;
+          const gananciaElement = document.getElementById('gananciaNeta');
+          gananciaElement.textContent = 'Q' + ganancia.toFixed(2);
+          gananciaElement.className = 'value' + (ganancia > 0 ? ' positivo' : ganancia < 0 ? ' negativo' : ' neutro');
+
+          document.getElementById('totalDias').textContent = data.dias || 0;
+
+          // Llenar tabla
           const tbody = document.getElementById('tablaReporte');
-          if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="2">No hay datos en este período</td></tr>';
+          if (datosReporte.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4">No hay datos en este período</td></tr>';
             return;
           }
-          let total = 0;
-          tbody.innerHTML = data.map(d => {
-            total += d.total_dia;
-            return `<tr><td>${d.dia}</td><td>Q${d.total_dia.toFixed(2)}</td></tr>`;
-          }).join('');
-          tbody.innerHTML += `<tr><td><strong>Total</strong></td><td><strong>Q${total.toFixed(2)}</strong></td></tr>`;
+          tbody.innerHTML = datosReporte.map(d => `
+            <tr>
+              <td>${d.dia}</td>
+              <td>Q${d.ventas.toFixed(2)}</td>
+              <td>Q${d.gastos.toFixed(2)}</td>
+              <td style="color: ${d.ganancia >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">
+                Q${d.ganancia.toFixed(2)}
+              </td>
+            </tr>
+          `).join('');
         })
         .catch(err => alert('Error: ' + err.message));
     });
 
+    // ---------- EXPORTAR EXCEL ----------
     document.getElementById('exportarExcelBtn').addEventListener('click', () => {
       if (datosReporte.length === 0) return alert('Primero genera un reporte');
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(datosReporte.map(d => ({
         'Fecha': d.dia,
-        'Total Ventas': d.total_dia
+        'Ventas (Q)': d.ventas.toFixed(2),
+        'Gastos (Q)': d.gastos.toFixed(2),
+        'Ganancia Neta (Q)': d.ganancia.toFixed(2)
       })));
+
+      // Agregar fila de totales
+      const totalVentas = datosReporte.reduce((s, d) => s + d.ventas, 0);
+      const totalGastos = datosReporte.reduce((s, d) => s + d.gastos, 0);
+      const gananciaNeta = totalVentas - totalGastos;
+
+      XLSX.utils.sheet_add_aoa(ws, [
+        [],
+        ['TOTALES', totalVentas.toFixed(2), totalGastos.toFixed(2), gananciaNeta.toFixed(2)]
+      ], { origin: -1 });
+
       XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
-      XLSX.writeFile(wb, 'reporte_ventas.xlsx');
+      XLSX.writeFile(wb, 'reporte_ventas_gastos.xlsx');
     });
+
+    // ---------- ESTABLECER FECHAS POR DEFECTO ----------
+    const hoy = new Date();
+    const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    document.getElementById('fechaInicio').value = primerDia.toISOString().slice(0,10);
+    document.getElementById('fechaFin').value = hoy.toISOString().slice(0,10);
   </script>
 </body>
 </html>

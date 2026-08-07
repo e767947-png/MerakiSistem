@@ -913,6 +913,79 @@ app.get("/api/reportes/ganancias", isAuthenticated, (req, res) => {
   }
 });
 
+// Reporte combinado: ventas y gastos por día
+app.get("/api/reportes/resumen", isAuthenticated, (req, res) => {
+  const { inicio, fin } = req.query;
+  if (!inicio || !fin) {
+    return res.status(400).json({ error: "Se requieren fechas de inicio y fin" });
+  }
+
+  try {
+    // 1. Ventas por día
+    const ventasSQL = `
+      SELECT date(fecha) as dia, SUM(total) as total_ventas
+      FROM ventas
+      WHERE fecha >= ? AND fecha <= ?
+      GROUP BY date(fecha)
+      ORDER BY dia
+    `;
+    const ventasRows = db.prepare(ventasSQL).all(inicio, fin);
+
+    // 2. Gastos por día (todos los gastos, independientemente de tipo)
+    const gastosSQL = `
+      SELECT date(fecha) as dia, SUM(monto) as total_gastos
+      FROM gastos
+      WHERE fecha >= ? AND fecha <= ?
+      GROUP BY date(fecha)
+      ORDER BY dia
+    `;
+    const gastosRows = db.prepare(gastosSQL).all(inicio, fin);
+
+    // 3. Combinar por día
+    const mapa = new Map();
+
+    ventasRows.forEach(row => {
+      mapa.set(row.dia, { dia: row.dia, ventas: row.total_ventas, gastos: 0 });
+    });
+
+    gastosRows.forEach(row => {
+      if (mapa.has(row.dia)) {
+        mapa.get(row.dia).gastos = row.total_gastos;
+      } else {
+        mapa.set(row.dia, { dia: row.dia, ventas: 0, gastos: row.total_gastos });
+      }
+    });
+
+    // Convertir mapa a array y calcular ganancia neta
+    const resultado = Array.from(mapa.values()).map(item => ({
+      dia: item.dia,
+      ventas: item.ventas || 0,
+      gastos: item.gastos || 0,
+      ganancia: (item.ventas || 0) - (item.gastos || 0)
+    }));
+
+    // Ordenar por fecha
+    resultado.sort((a, b) => a.dia.localeCompare(b.dia));
+
+    // 4. Totales del período
+    const totalVentas = resultado.reduce((sum, r) => sum + r.ventas, 0);
+    const totalGastos = resultado.reduce((sum, r) => sum + r.gastos, 0);
+    const gananciaNeta = totalVentas - totalGastos;
+
+    res.json({
+      detalle: resultado,
+      totalVentas: totalVentas,
+      totalGastos: totalGastos,
+      gananciaNeta: gananciaNeta,
+      dias: resultado.length
+    });
+
+  } catch (err) {
+    console.error('Error en reporte resumen:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------- INICIAR SERVIDOR ----------
 const server = app.listen(PORT, () => {
   console.log(`🚀 Servidor iniciado en http://localhost:${PORT}`);
