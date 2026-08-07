@@ -73,6 +73,10 @@
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');
     const menuToggle = document.getElementById('menuToggle');
+
+    // Al inicio del script, después de declarar variables
+document.getElementById('fechaGasto').value = new Date().toISOString().slice(0,10);
+
     // Establecer fecha actual por defecto en el campo fecha
 document.getElementById('fechaGasto').value = new Date().toISOString().slice(0,10);
 
@@ -127,7 +131,7 @@ document.getElementById('fechaGasto').value = new Date().toISOString().slice(0,1
         .catch(err => console.error(err));
     }
 
-   document.getElementById('guardarGastoBtn').addEventListener('click', () => {
+  document.getElementById('guardarGastoBtn').addEventListener('click', () => {
   const descripcion = document.getElementById('descGasto').value.trim();
   const categoria = document.getElementById('catGasto').value;
   const fecha = document.getElementById('fechaGasto').value;
@@ -140,6 +144,7 @@ document.getElementById('fechaGasto').value = new Date().toISOString().slice(0,1
   fetch('/api/gastos', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ descripcion, categoria, fecha, monto, tipo })
   })
     .then(res => res.json())
@@ -150,10 +155,7 @@ document.getElementById('fechaGasto').value = new Date().toISOString().slice(0,1
       cargarGastos();
     })
     .catch(err => alert('Error: ' + err.message));
-
-    // Establecer fecha actual por defecto
-document.getElementById('fechaGasto').value = new Date().toISOString().slice(0,10);
-});
+}); // <--- CIERRE CORRECTO
 
     cargarGastos();
   </script>
