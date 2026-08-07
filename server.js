@@ -730,47 +730,22 @@ app.get("/api/dashboard", isAuthenticated, (req, res) => {
 });
 
 // Gastos (resumido)
-app.get("/api/gastos", isAuthenticated, (req, res) => {
-  const { fecha_inicio, fecha_fin, categoria } = req.query;
-  let sql = "SELECT * FROM gastos WHERE 1=1";
-  const params = [];
-  if (fecha_inicio) {
-    sql += " AND fecha >= ?";
-    params.push(fecha_inicio);
-  }
-  if (fecha_fin) {
-    sql += " AND fecha <= ?";
-    params.push(fecha_fin);
-  }
-  if (categoria) {
-    sql += " AND categoria = ?";
-    params.push(categoria);
-  }
-  sql += " ORDER BY fecha DESC LIMIT 100";
-  try {
-    const rows = db.prepare(sql).all(...params);
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.post("/api/gastos", isAuthenticated, (req, res) => {
-  const { descripcion, categoria, monto, tipo } = req.body;
-    const fechaGasto = fecha || new Date().toISOString(); // Si no viene fecha, usa la actual
-  const gastoTipo = tipo || 'Diario'; // por defecto Diario
+  const { descripcion, categoria, monto, tipo, fecha } = req.body;
+  const fechaGasto = fecha || new Date().toISOString();
+  const gastoTipo = tipo || 'Diario';
 
   try {
     const insertGasto = db.prepare(
       "INSERT INTO gastos (fecha, descripcion, categoria, monto, tipo) VALUES (?, ?, ?, ?, ?)"
     );
-    const result = insertGasto.run(fecha, descripcion, categoria, monto, gastoTipo);
+    const result = insertGasto.run(fechaGasto, descripcion, categoria, monto, gastoTipo);
 
-    // Solo si es gasto DIARIO, afecta la caja (egresos)
+    // Solo si es gasto DIARIO, afecta la caja (egresos) en la fecha del gasto
     if (gastoTipo === 'Diario') {
       const cajaRow = db.prepare(
         "SELECT id FROM caja WHERE date(fecha) = date(?) AND estado = 'abierta'"
-      ).get(fecha);
+      ).get(fechaGasto);
       if (cajaRow) {
         db.prepare("UPDATE caja SET egresos = egresos + ? WHERE id = ?").run(monto, cajaRow.id);
       }
@@ -778,6 +753,7 @@ app.post("/api/gastos", isAuthenticated, (req, res) => {
 
     res.json({ mensaje: "Gasto registrado", id: result.lastInsertRowid });
   } catch (err) {
+    console.error('❌ Error al registrar gasto:', err);
     res.status(500).json({ error: err.message });
   }
 });
