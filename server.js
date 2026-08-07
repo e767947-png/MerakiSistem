@@ -729,10 +729,36 @@ app.get("/api/dashboard", isAuthenticated, (req, res) => {
   }
 });
 
+// Obtener historial de gastos
+app.get("/api/gastos", isAuthenticated, (req, res) => {
+  const { fecha_inicio, fecha_fin, categoria } = req.query;
+  let sql = "SELECT * FROM gastos WHERE 1=1";
+  const params = [];
+  if (fecha_inicio) {
+    sql += " AND fecha >= ?";
+    params.push(fecha_inicio);
+  }
+  if (fecha_fin) {
+    sql += " AND fecha <= ?";
+    params.push(fecha_fin);
+  }
+  if (categoria) {
+    sql += " AND categoria = ?";
+    params.push(categoria);
+  }
+  sql += " ORDER BY fecha DESC LIMIT 100";
+  try {
+    const rows = db.prepare(sql).all(...params);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Gastos (resumido)
 app.post("/api/gastos", isAuthenticated, (req, res) => {
   const { descripcion, categoria, monto, tipo, fecha } = req.body;
- const fechaGasto = fecha || new Date().toISOString().slice(0,10);
+  const fechaGasto = fecha || new Date().toISOString().slice(0,10);
   const gastoTipo = tipo || 'Diario';
 
   try {
@@ -741,7 +767,6 @@ app.post("/api/gastos", isAuthenticated, (req, res) => {
     );
     const result = insertGasto.run(fechaGasto, descripcion, categoria, monto, gastoTipo);
 
-    // Solo si es gasto DIARIO, afecta la caja (egresos) en la fecha del gasto
     if (gastoTipo === 'Diario') {
       const cajaRow = db.prepare(
         "SELECT id FROM caja WHERE date(fecha) = date(?) AND estado = 'abierta'"
