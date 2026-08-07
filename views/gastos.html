@@ -44,6 +44,12 @@
         <input type="number" id="montoGasto" step="0.01" placeholder="0.00">
       </div>
       <div class="form-group">
+
+        <div class="form-group">
+  <label>Fecha</label>
+  <input type="date" id="fechaGasto" value="">
+</div>
+
         <label>Tipo de Gasto</label>
         <select id="tipoGasto">
           <option value="Diario">Diario (resta de caja)</option>
@@ -69,6 +75,8 @@
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');
     const menuToggle = document.getElementById('menuToggle');
+    // Establecer fecha actual por defecto en el campo fecha
+document.getElementById('fechaGasto').value = new Date().toISOString().slice(0,10);
 
     function toggleMenu() {
       sidebar.classList.toggle('open');
@@ -122,27 +130,30 @@
     }
 
     document.getElementById('guardarGastoBtn').addEventListener('click', () => {
-      const descripcion = document.getElementById('descGasto').value.trim();
-      const categoria = document.getElementById('catGasto').value;
-      const monto = parseFloat(document.getElementById('montoGasto').value);
-      const tipo = document.getElementById('tipoGasto').value;
+  const descripcion = document.getElementById('descGasto').value.trim();
+  const categoria = document.getElementById('catGasto').value;
+  const monto = parseFloat(document.getElementById('montoGasto').value);
+  const fecha = document.getElementById('fechaGasto').value;
+  const tipo = document.getElementById('tipoGasto').value;
 
-      if (!descripcion || isNaN(monto) || monto <= 0) return alert('Completa todos los campos correctamente');
+  if (!fecha) return alert('Selecciona una fecha');
+  if (!descripcion || isNaN(monto) || monto <= 0) return alert('Completa todos los campos correctamente');
 
-      fetchWithCreds('/api/gastos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ descripcion, categoria, monto, tipo })
-      })
-        .then(res => res.json())
-        .then(data => {
-          alert(data.mensaje);
-          document.getElementById('descGasto').value = '';
-          document.getElementById('montoGasto').value = '';
-          cargarGastos();
-        })
-        .catch(err => alert('Error: ' + err.message));
-    });
+  fetch('/api/gastos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ descripcion, categoria, monto, tipo, fecha })
+  })
+    .then(res => res.json())
+    .then(data => {
+      alert(data.mensaje);
+      document.getElementById('descGasto').value = '';
+      document.getElementById('montoGasto').value = '';
+      cargarGastos();
+    })
+    .catch(err => alert('Error: ' + err.message));
+});
+
 
     cargarGastos();
   </script>
