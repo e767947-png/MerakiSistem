@@ -26,41 +26,39 @@
   <main class="main">
     <h1>💸 Registrar Gasto</h1>
     <div class="form-row">
-      <div class="form-group">
-        <label>Descripción</label>
-        <input type="text" id="descGasto" placeholder="Ej: Compra de leche">
-      </div>
-      <div class="form-group">
-        <label>Categoría</label>
-        <select id="catGasto">
-          <option value="Insumos">Insumos</option>
-          <option value="Servicios">Servicios</option>
-          <option value="Mantenimiento">Mantenimiento</option>
-          <option value="Otros">Otros</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Monto</label>
-        <input type="number" id="montoGasto" step="0.01" placeholder="0.00">
-      </div>
-      <div class="form-group">
-
-        <div class="form-group">
-  <label>Fecha</label>
-  <input type="date" id="fechaGasto" value="">
+  <div class="form-group">
+    <label>Descripción</label>
+    <input type="text" id="descGasto" placeholder="Ej: Compra de leche">
+  </div>
+  <div class="form-group">
+    <label>Categoría</label>
+    <select id="catGasto">
+      <option value="Insumos">Insumos</option>
+      <option value="Servicios">Servicios</option>
+      <option value="Mantenimiento">Mantenimiento</option>
+      <option value="Otros">Otros</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label>Fecha</label>
+    <input type="date" id="fechaGasto" value="">
+  </div>
+  <div class="form-group">
+    <label>Monto</label>
+    <input type="number" id="montoGasto" step="0.01" placeholder="0.00">
+  </div>
+  <div class="form-group">
+    <label>Tipo de Gasto</label>
+    <select id="tipoGasto">
+      <option value="Diario">Diario (resta de caja)</option>
+      <option value="General">General (no resta de caja)</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label>&nbsp;</label>
+    <button class="btn" id="guardarGastoBtn">Guardar Gasto</button>
+  </div>
 </div>
-
-        <label>Tipo de Gasto</label>
-        <select id="tipoGasto">
-          <option value="Diario">Diario (resta de caja)</option>
-          <option value="General">General (solo registro)</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>&nbsp;</label>
-        <button class="btn" id="guardarGastoBtn">Guardar Gasto</button>
-      </div>
-    </div>
 
     <h2>Historial de Gastos</h2>
     <div style="overflow-x:auto;">
@@ -129,20 +127,20 @@ document.getElementById('fechaGasto').value = new Date().toISOString().slice(0,1
         .catch(err => console.error(err));
     }
 
-    document.getElementById('guardarGastoBtn').addEventListener('click', () => {
+   document.getElementById('guardarGastoBtn').addEventListener('click', () => {
   const descripcion = document.getElementById('descGasto').value.trim();
   const categoria = document.getElementById('catGasto').value;
-  const monto = parseFloat(document.getElementById('montoGasto').value);
   const fecha = document.getElementById('fechaGasto').value;
+  const monto = parseFloat(document.getElementById('montoGasto').value);
   const tipo = document.getElementById('tipoGasto').value;
 
-  if (!fecha) return alert('Selecciona una fecha');
   if (!descripcion || isNaN(monto) || monto <= 0) return alert('Completa todos los campos correctamente');
+  if (!fecha) return alert('Selecciona una fecha');
 
   fetch('/api/gastos', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ descripcion, categoria, monto, tipo, fecha })
+    body: JSON.stringify({ descripcion, categoria, fecha, monto, tipo })
   })
     .then(res => res.json())
     .then(data => {
@@ -152,8 +150,10 @@ document.getElementById('fechaGasto').value = new Date().toISOString().slice(0,1
       cargarGastos();
     })
     .catch(err => alert('Error: ' + err.message));
-});
 
+    // Establecer fecha actual por defecto
+document.getElementById('fechaGasto').value = new Date().toISOString().slice(0,10);
+});
 
     cargarGastos();
   </script>
