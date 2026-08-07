@@ -115,14 +115,14 @@ document.getElementById('fechaGasto').value = new Date().toISOString().slice(0,1
             return;
           }
           tbody.innerHTML = data.map(g => `
-            <tr>
-              <td>${new Date(g.fecha).toLocaleString()}</td>
-              <td>${g.descripcion}</td>
-              <td>${g.categoria}</td>
-              <td>${g.tipo || 'Diario'}</td>
-              <td>Q${g.monto.toFixed(2)}</td>
-            </tr>
-          `).join('');
+  <tr>
+    <td>${g.fecha ? g.fecha.slice(0,10) : ''}</td>
+    <td>${g.descripcion}</td>
+    <td>${g.categoria}</td>
+    <td>${g.tipo || 'Diario'}</td>
+    <td>Q${g.monto.toFixed(2)}</td>
+  </tr>
+`).join('');
         })
         .catch(err => console.error(err));
     }

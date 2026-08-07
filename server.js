@@ -474,7 +474,7 @@ app.post("/api/ventas", isAuthenticated, (req, res) => {
 
   const subtotal = venta.productos.reduce((sum, p) => sum + p.cantidad * p.precio, 0);
   const total = subtotal - (venta.descuento || 0);
-  const fecha = venta.fecha || new Date().toISOString();
+ const fecha = venta.fecha || new Date().toISOString().slice(0,10);
 
   try {
     const insertVenta = db.prepare(
@@ -732,7 +732,7 @@ app.get("/api/dashboard", isAuthenticated, (req, res) => {
 // Gastos (resumido)
 app.post("/api/gastos", isAuthenticated, (req, res) => {
   const { descripcion, categoria, monto, tipo, fecha } = req.body;
-  const fechaGasto = fecha || new Date().toISOString();
+ const fechaGasto = fecha || new Date().toISOString().slice(0,10);
   const gastoTipo = tipo || 'Diario';
 
   try {
@@ -819,7 +819,7 @@ app.get("/api/caja/resumen", isAuthenticated, (req, res) => {
 
 app.post("/api/caja/apertura", isAuthenticated, (req, res) => {
   const { monto_apertura } = req.body;
-  const fecha = new Date().toISOString();
+ const fecha = new Date().toISOString().slice(0,10);
   try {
     const cajaExistente = db.prepare(
       "SELECT id FROM caja WHERE date(fecha) = date(?) AND estado = 'abierta'"

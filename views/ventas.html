@@ -256,17 +256,17 @@
             return;
           }
           tbody.innerHTML = data.slice(0, 20).map(v => `
-            <tr>
-              <td>${v.id}</td>
-              <td>${new Date(v.fecha).toLocaleString()}</td>
-              <td>${v.metodo_pago}</td>
-              <td>Q${v.total.toFixed(2)}</td>
-              <td>
-                <button class="btn btn-sm" onclick="verDetalle(${v.id})">Ver</button>
-                <button class="btn btn-sm btn-danger" onclick="eliminarVenta(${v.id})">🗑️ Eliminar</button>
-              </td>
-            </tr>
-          `).join('');
+  <tr>
+    <td>${v.id}</td>
+    <td>${v.fecha ? v.fecha.slice(0,10) : ''}</td>
+    <td>${v.metodo_pago}</td>
+    <td>Q${v.total.toFixed(2)}</td>
+    <td>
+      <button class="btn btn-sm" onclick="verDetalle(${v.id})">Ver</button>
+      <button class="btn btn-sm btn-danger" onclick="eliminarVenta(${v.id})">🗑️ Eliminar</button>
+    </td>
+  </tr>
+`).join('');
         })
         .catch(err => console.error(err));
     }
